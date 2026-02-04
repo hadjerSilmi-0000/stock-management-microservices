@@ -1,205 +1,186 @@
-import Product from "../models/productModel.js";
 import logger from "../utils/logger.js";
+import {
+    createPaginationResponse,
+    parseSortParams,
+    parseFieldsParams,
+    buildFilterQuery,
+} from "../utils/pagination.js";
+import {
+    NotFoundError,
+    ConflictError,
+    BadRequestError,
+    asyncHandler,
+} from "../utils/errors.js";
 
 // @desc    Create new product
-// @route   POST /api/products
+// @route   POST /api/v1/products
 // @access  Private (Admin, Manager)
-export const createProduct = async (req, res, next) => {
-    try {
-        const { name, description, category, price, sku, supplierId, lowStockThreshold } = req.body;
+export const createProduct = asyncHandler(async (req, res) => {
+    const { name, description, category, price, sku, supplierId, lowStockThreshold } = req.body;
 
-        const existingProduct = await Product.findOne({ sku });
-        if (existingProduct) {
-            return res.status(400).json({
-                success: false,
-                message: "Product with this SKU already exists",
-            });
-        }
-
-        // Create product with createdBy from authenticated user
-        const product = await Product.create({
-            name,
-            description,
-            category,
-            price,
-            sku,
-            supplierId,
-            lowStockThreshold,
-            createdBy: req.user.id,
-        });
-
-        logger.info(`Product created: ${product.sku} by user ${req.user.id}`);
-
-        res.status(201).json({
-            success: true,
-            message: "Product created successfully",
-            product,
-        });
-    } catch (err) {
-        next(err);
+    const existingProduct = await Product.findOne({ sku });
+    if (existingProduct) {
+        throw new ConflictError("Product with this SKU", "PRODUCT_ALREADY_EXISTS");
     }
-};
 
-// @desc    Get all products
-// @route   GET /api/products
+    const product = await Product.create({
+        name,
+        description,
+        category,
+        price,
+        sku,
+        supplierId,
+        lowStockThreshold,
+        createdBy: req.user.id,
+    });
+
+    logger.info(`Product created: ${product.sku} by user ${req.user.id}`);
+
+    res.status(201).json({
+        success: true,
+        message: "Product created successfully",
+        data: product,
+    });
+});
+
+// @desc    Get all products with pagination, filtering, and sorting
+// @route   GET /api/v1/products?page=1&limit=20&category=Electronics&sort=-price
 // @access  Private (Admin, Manager)
-export const getAllProducts = async (req, res, next) => {
-    try {
-        const filter = req.user.role === "admin" ? {} : { isActive: true };
+export const getAllProducts = asyncHandler(async (req, res) => {
+    const { page, limit, skip } = req.pagination;
 
-        const products = await Product.find(filter).sort({ createdAt: -1 });
+    // Build filter query
+    const allowedFilters = ['category', 'sku', 'name', 'supplierId', 'isActive'];
+    const filter = buildFilterQuery(req.query, allowedFilters);
 
-        res.json({
-            success: true,
-            count: products.length,
-            products,
-        });
-    } catch (err) {
-        next(err);
+    // Role-based filtering
+    if (req.user.role !== "admin") {
+        filter.isActive = true;
     }
-};
+
+    // Parse sort and fields
+    const sort = parseSortParams(req.query.sort);
+    const fields = parseFieldsParams(req.query.fields);
+
+    // Execute query
+    const [products, total] = await Promise.all([
+        Product.find(filter)
+            .select(fields)
+            .sort(sort)
+            .skip(skip)
+            .limit(limit),
+        Product.countDocuments(filter),
+    ]);
+
+    res.json(createPaginationResponse(products, total, page, limit));
+});
 
 // @desc    Get single product by ID
-// @route   GET /api/products/:id
+// @route   GET /api/v1/products/:id
 // @access  Private (Admin, Manager)
-export const getProductById = async (req, res, next) => {
-    try {
-        const product = await Product.findById(req.params.id);
+export const getProductById = asyncHandler(async (req, res) => {
+    const product = await Product.findById(req.params.id);
 
-        if (!product) {
-            return res.status(404).json({
-                success: false,
-                message: "Product not found",
-            });
-        }
-
-        if (req.user.role === "manager" && !product.isActive) {
-            return res.status(404).json({
-                success: false,
-                message: "Product not found",
-            });
-        }
-
-        res.json({
-            success: true,
-            product,
-        });
-    } catch (err) {
-        next(err);
+    if (!product) {
+        throw new NotFoundError("Product", "PRODUCT_NOT_FOUND");
     }
-};
+
+    if (req.user.role === "manager" && !product.isActive) {
+        throw new NotFoundError("Product", "PRODUCT_NOT_FOUND");
+    }
+
+    res.json({
+        success: true,
+        data: product,
+    });
+});
 
 // @desc    Update product
-// @route   PUT /api/products/:id
+// @route   PUT /api/v1/products/:id
 // @access  Private (Admin, Manager)
-export const updateProduct = async (req, res, next) => {
-    try {
-        const allowedUpdates = [
-            "name",
-            "description",
-            "category",
-            "price",
-            "supplierId",
-            "lowStockThreshold",
-        ];
+export const updateProduct = asyncHandler(async (req, res) => {
+    const allowedUpdates = [
+        "name",
+        "description",
+        "category",
+        "price",
+        "supplierId",
+        "lowStockThreshold",
+    ];
 
-        const updates = {};
-        for (let key of allowedUpdates) {
-            if (req.body[key] !== undefined) {
-                updates[key] = req.body[key];
-            }
+    const updates = {};
+    for (let key of allowedUpdates) {
+        if (req.body[key] !== undefined) {
+            updates[key] = req.body[key];
         }
-
-        if (req.body.sku) {
-            return res.status(400).json({
-                success: false,
-                message: "SKU cannot be modified",
-            });
-        }
-
-        const product = await Product.findByIdAndUpdate(
-            req.params.id,
-            updates,
-            { new: true, runValidators: true }
-        );
-
-        if (!product) {
-            return res.status(404).json({
-                success: false,
-                message: "Product not found",
-            });
-        }
-
-        logger.info(`Product updated: ${product.sku} by user ${req.user.id}`);
-
-        res.json({
-            success: true,
-            message: "Product updated successfully",
-            product,
-        });
-    } catch (err) {
-        next(err);
     }
-};
+
+    if (req.body.sku) {
+        throw new BadRequestError("SKU cannot be modified", "INVALID_SKU");
+    }
+
+    const product = await Product.findByIdAndUpdate(
+        req.params.id,
+        updates,
+        { new: true, runValidators: true }
+    );
+
+    if (!product) {
+        throw new NotFoundError("Product", "PRODUCT_NOT_FOUND");
+    }
+
+    logger.info(`Product updated: ${product.sku} by user ${req.user.id}`);
+
+    res.json({
+        success: true,
+        message: "Product updated successfully",
+        data: product,
+    });
+});
 
 // @desc    Delete product (soft delete)
-// @route   DELETE /api/products/:id
+// @route   DELETE /api/v1/products/:id
 // @access  Private (Admin only)
-export const deleteProduct = async (req, res, next) => {
-    try {
-        const product = await Product.findById(req.params.id);
+export const deleteProduct = asyncHandler(async (req, res) => {
+    const product = await Product.findById(req.params.id);
 
-        if (!product) {
-            return res.status(404).json({
-                success: false,
-                message: "Product not found",
-            });
-        }
-
-        await product.softDelete();
-
-        logger.info(`Product soft-deleted: ${product.sku} by user ${req.user.id}`);
-
-        res.json({
-            success: true,
-            message: "Product deleted successfully",
-        });
-    } catch (err) {
-        next(err);
+    if (!product) {
+        throw new NotFoundError("Product", "PRODUCT_NOT_FOUND");
     }
-};
+
+    await product.softDelete();
+
+    logger.info(`Product soft-deleted: ${product.sku} by user ${req.user.id}`);
+
+    res.json({
+        success: true,
+        message: "Product deleted successfully",
+    });
+});
 
 // @desc    Search products
-// @route   GET /api/products/search?q=query
+// @route   GET /api/v1/products/search?q=query
 // @access  Private (Admin, Manager)
-export const searchProducts = async (req, res, next) => {
-    try {
-        const { q } = req.query;
+export const searchProducts = asyncHandler(async (req, res) => {
+    const { q } = req.query;
+    const { page, limit, skip } = req.pagination;
 
-        if (!q || q.trim() === "") {
-            return res.status(400).json({
-                success: false,
-                message: "Search query is required",
-            });
-        }
-
-        const filter = req.user.role === "admin" ? {} : { isActive: true };
-
-        const products = await Product.find({
-            ...filter,
-            $or: [
-                { name: { $regex: q, $options: "i" } },
-                { description: { $regex: q, $options: "i" } },
-                { sku: { $regex: q, $options: "i" } },
-            ],
-        });
-
-        res.json({
-            success: true,
-            count: products.length,
-            products,
-        });
-    } catch (err) {
-        next(err);
+    if (!q || q.trim() === "") {
+        throw new BadRequestError("Search query is required", "INVALID_INPUT");
     }
-};
+
+    const filter = req.user.role === "admin" ? {} : { isActive: true };
+
+    filter.$or = [
+        { name: { $regex: q, $options: "i" } },
+        { description: { $regex: q, $options: "i" } },
+        { sku: { $regex: q, $options: "i" } },
+    ];
+
+    const [products, total] = await Promise.all([
+        Product.find(filter).skip(skip).limit(limit),
+        Product.countDocuments(filter),
+    ]);
+
+    res.json(createPaginationResponse(products, total, page, limit));
+});
