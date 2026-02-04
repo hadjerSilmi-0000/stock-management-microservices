@@ -11,6 +11,7 @@ import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { roleMiddleware } from "../middlewares/roleMiddleware.js";
 import { validateRequest } from "../middlewares/validationMiddleware.js";
 import { createProductSchema, updateProductSchema } from "../validations/productValidation.js";
+import { paginationMiddleware } from "../utils/pagination.js";
 
 const router = express.Router();
 
@@ -27,6 +28,7 @@ router.get(
     "/search",
     authMiddleware,
     roleMiddleware("admin", "manager"),
+    paginationMiddleware,
     searchProducts
 );
 
@@ -42,6 +44,7 @@ router.get(
     "/",
     authMiddleware,
     roleMiddleware("admin", "manager"),
+    paginationMiddleware,
     getAllProducts
 );
 

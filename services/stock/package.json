@@ -9,7 +9,9 @@
         "start": "node src/server.js"
     },
     "dependencies": {
+        "amqplib": "^0.10.9",
         "axios": "^1.6.2",
+        "consul": "^2.0.1",
         "cors": "^2.8.5",
         "dotenv": "^17.2.3",
         "express": "^4.21.2",

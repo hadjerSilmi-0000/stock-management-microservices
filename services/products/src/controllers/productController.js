@@ -1,4 +1,5 @@
 import logger from "../utils/logger.js";
+import Product from "../models/productModel.js";
 import {
     createPaginationResponse,
     parseSortParams,

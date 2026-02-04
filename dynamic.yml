@@ -1,0 +1,201 @@
+# =================================================================
+# Traefik Dynamic Configuration - Service Routes & Middleware
+# File: C:\traefik\dynamic.yml
+# =================================================================
+
+http:
+  # =================================================================
+  # MIDDLEWARE
+  # =================================================================
+  middlewares:
+    # CORS Headers
+    cors-headers:
+      headers:
+        accessControlAllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - PATCH
+          - OPTIONS
+        accessControlAllowOriginList:
+          - http://localhost:5173
+          - http://localhost:3000
+          - http://localhost:5174
+        accessControlAllowHeaders:
+          - "*"
+        accessControlExposeHeaders:
+          - "*"
+        accessControlAllowCredentials: true
+        accessControlMaxAge: 100
+        addVaryHeader: true
+    
+    # Rate Limiting
+    rate-limit:
+      rateLimit:
+        average: 100       # 100 requests per period
+        burst: 50          # Allow burst of 50 extra requests
+        period: 1m         # 1 minute period
+    
+    # Request ID Header
+    request-id:
+      headers:
+        customRequestHeaders:
+          X-Request-ID: "{{.UUID}}"
+    
+    # Security Headers
+    security-headers:
+      headers:
+        browserXssFilter: true
+        contentTypeNosniff: true
+        frameDeny: true
+        sslRedirect: false  # Set to true in production with HTTPS
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        customFrameOptionsValue: "SAMEORIGIN"
+    
+    # Compress responses
+    compression:
+      compress: {}
+    
+    # Strip /api prefix before forwarding to services
+    strip-api-prefix:
+      stripPrefix:
+        prefixes:
+          - /api
+    
+    # Authentication (future - JWT validation at gateway)
+    # jwt-auth:
+    #   forwardAuth:
+    #     address: http://localhost:5001/api/users/validate-token
+    #     trustForwardHeader: true
+
+  # =================================================================
+  # ROUTERS
+  # =================================================================
+  routers:
+    # Users Service Router
+    users-service:
+      rule: "PathPrefix(`/api/users`)"
+      service: users-service
+      entryPoints:
+        - web
+      middlewares:
+        - cors-headers
+        - rate-limit
+        - request-id
+        - security-headers
+        - compression
+    
+    # Products Service Router
+    products-service:
+      rule: "PathPrefix(`/api/products`)"
+      service: products-service
+      entryPoints:
+        - web
+      middlewares:
+        - cors-headers
+        - rate-limit
+        - request-id
+        - security-headers
+        - compression
+    
+    # Stock Service Router
+    stock-service:
+      rule: "PathPrefix(`/api/stock`)"
+      service: stock-service
+      entryPoints:
+        - web
+      middlewares:
+        - cors-headers
+        - rate-limit
+        - request-id
+        - security-headers
+        - compression
+    
+    # Suppliers Service Router
+    suppliers-service:
+      rule: "PathPrefix(`/api/suppliers`)"
+      service: suppliers-service
+      entryPoints:
+        - web
+      middlewares:
+        - cors-headers
+        - rate-limit
+        - request-id
+        - security-headers
+        - compression
+    
+    # Health Check Aggregator (optional)
+    health-check:
+      rule: "Path(`/health`)"
+      service: health-aggregator
+      entryPoints:
+        - web
+
+  # =================================================================
+  # SERVICES (Backend servers)
+  # =================================================================
+  services:
+    # Users Service
+    users-service:
+      loadBalancer:
+        servers:
+          - url: "http://localhost:5001"
+        healthCheck:
+          path: "/api/users/health"
+          interval: "10s"
+          timeout: "3s"
+        # Load balancing strategy (optional)
+        # passHostHeader: true
+    
+    # Products Service
+    products-service:
+      loadBalancer:
+        servers:
+          - url: "http://localhost:5002"
+        healthCheck:
+          path: "/api/products/health"
+          interval: "10s"
+          timeout: "3s"
+    
+    # Stock Service
+    stock-service:
+      loadBalancer:
+        servers:
+          - url: "http://localhost:5003"
+        healthCheck:
+          path: "/api/stock/health"
+          interval: "10s"
+          timeout: "3s"
+    
+    # Suppliers Service
+    suppliers-service:
+      loadBalancer:
+        servers:
+          - url: "http://localhost:5004"
+        healthCheck:
+          path: "/api/suppliers/health"
+          interval: "10s"
+          timeout: "3s"
+    
+    # Health Check Aggregator (future)
+    health-aggregator:
+      loadBalancer:
+        servers:
+          - url: "http://localhost:5001/api/users/health"
+
+# =================================================================
+# TCP ROUTERS (if needed for non-HTTP services)
+# =================================================================
+# tcp:
+#   routers: {}
+#   services: {}
+
+# =================================================================
+# UDP ROUTERS (if needed)
+# =================================================================
+# udp:
+#   routers: {}
+#   services: {}

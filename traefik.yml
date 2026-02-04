@@ -1,0 +1,81 @@
+# Global Configuration
+global:
+  checkNewVersion: true
+  sendAnonymousUsage: false
+
+# API and Dashboard
+api:
+  dashboard: true
+  insecure: true  # ONLY for development - disable in production
+
+# Entry Points (where Traefik listens)
+entryPoints:
+  # HTTP entry point for all microservices
+  web:
+    address: ":80"
+    http:
+      # Redirect to HTTPS in production
+      # redirections:
+      #   entryPoint:
+      #     to: websecure
+      #     scheme: https
+  
+  # HTTPS entry point (for production)
+  # websecure:
+  #   address: ":443"
+  
+  # Traefik dashboard
+  traefik:
+    address: ":8080"
+
+# Providers
+providers:
+  # File provider - static configuration from files
+  file:
+    filename: C:\\traefik\\dynamic.yml
+    watch: true  # Auto-reload on file changes
+  
+  # Consul Catalog - dynamic service discovery
+  consulCatalog:
+    endpoint:
+      address: "127.0.0.1:8500"
+    exposedByDefault: false  # Services must opt-in
+    prefix: "traefik"
+    defaultRule: "PathPrefix(`/api/{{ .Name }}`)"
+    # Refresh interval
+    refreshInterval: 10s
+    # Consul service health checks
+    healthCheck:
+      interval: 10s
+
+# Logging
+log:
+  level: INFO  # DEBUG, INFO, WARN, ERROR
+  filePath: C:\\traefik\\logs\\traefik.log
+  format: json  # json or common
+
+# Access Logs
+accessLog:
+  filePath: C:\\traefik\\logs\\access.log
+  format: json
+  fields:
+    defaultMode: keep
+    headers:
+      defaultMode: keep
+
+# Metrics (optional - for monitoring)
+metrics:
+  prometheus:
+    addEntryPointsLabels: true
+    addServicesLabels: true
+    entryPoint: traefik
+
+# Health Check
+ping:
+  entryPoint: traefik
+
+# Tracing (optional)
+# tracing:
+#   jaeger:
+#     samplingServerURL: http://localhost:5778/sampling
+#     localAgentHostPort: localhost:6831

@@ -9,57 +9,41 @@ import { swaggerServe, swaggerSetup } from "./config/swagger.js";
 import productRoutes from "./routes/productRoutes.js";
 import { errorHandler } from "./middlewares/errorMiddleware.js";
 
+import ConsulClient from "../shared/utils/consulClient.js";
+import RabbitMQClient from "../shared/utils/rabbitmqClient.js";
+import { EXCHANGES } from "../shared/events/eventTypes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-
+// Load .env
 const envPath = path.resolve(__dirname, "../.env");
-console.log("Loading .env from:", envPath);
 const result = dotenv.config({ path: envPath });
-
 if (result.error) {
-    console.error(" ERROR: Could not load .env file!");
-    console.error("Path:", envPath);
-    console.error("Error:", result.error.message);
+    console.error("ERROR: Could not load .env file!", result.error.message);
     process.exit(1);
 }
 
-console.log(" Loaded", Object.keys(result.parsed || {}).length, "environment variables");
-
-// Verify MONGO_URI loaded
+// Check MONGO_URI
 if (!process.env.MONGO_URI) {
-    console.error(" ERROR: MONGO_URI not found in .env file!");
-    console.error("Expected .env location:", envPath);
-    console.error("\nYour .env file exists but MONGO_URI is missing or empty.");
-    console.error("\nPlease add this line to your .env:");
-    console.error("MONGO_URI=mongodb://localhost:27017/products_db");
+    console.error("ERROR: MONGO_URI not found in .env file!");
     process.exit(1);
 }
 
-console.log(" MONGO_URI loaded:", process.env.MONGO_URI);
-
-// Create Express app
+// Express app
 const app = express();
 
 // CORS Configuration
 const allowedOrigins = [
     "http://localhost:3000",
     "http://localhost:5173",
-    "http://localhost:5001", // Users service
-    "http://localhost:5003", // Stock service
-    "http://localhost:5004", // Suppliers service
+    "http://localhost:5001",
+    "http://localhost:5003",
+    "http://localhost:5004",
     process.env.FRONTEND_URL,
 ].filter(Boolean);
 
-app.use(
-    cors({
-        origin: allowedOrigins,
-        credentials: true,
-    })
-);
-
-// Global Middlewares
+app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
 
@@ -82,18 +66,43 @@ app.get("/", (req, res) => {
 // Error Handler
 app.use(errorHandler);
 
-// Server Startup
-const PORT = process.env.PORT || 5002;
+// RabbitMQ Setup
+const rabbitMQ = new RabbitMQClient();
+async function setupRabbitMQ() {
+    try {
+        await rabbitMQ.connect();
+        await rabbitMQ.createExchange(EXCHANGES.USERS, "topic");
+        console.log("RabbitMQ connected");
+    } catch (error) {
+        console.error("RabbitMQ failed:", error.message);
+    }
+}
 
+// Start Server
+const PORT = process.env.PORT || 5002;
 connectDB()
-    .then(() => {
-        app.listen(PORT, () => {
-            console.log(`\n Products Service running on http://localhost:${PORT}`);
-            console.log(` API Documentation: http://localhost:${PORT}/api-docs`);
-            console.log(` Health Check: http://localhost:${PORT}/api/products/health\n`);
+    .then(async () => {
+        app.listen(PORT, async () => {
+            console.log(`Products Service running on http://localhost:${PORT}`);
+            console.log(`API Documentation: http://localhost:${PORT}/api-docs`);
+            console.log(`Health Check: http://localhost:${PORT}/api/products/health`);
+
+            // Setup RabbitMQ
+            await setupRabbitMQ();
+
+            // Register with Consul
+            const SERVICE_NAME = process.env.SERVICE_NAME || "products-service";
+            const consulClient = new ConsulClient(
+                SERVICE_NAME,
+                PORT,
+                `/api/${SERVICE_NAME.split("-")[0]}/health`
+            );
+            await consulClient.register();
         });
     })
     .catch((err) => {
-        console.error(" Failed to connect to MongoDB:", err);
+        console.error("Failed to connect to MongoDB:", err);
         process.exit(1);
     });
+
+export { rabbitMQ };

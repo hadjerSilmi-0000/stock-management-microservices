@@ -1,0 +1,24 @@
+{
+    "datacenter": "dc1",
+    "data_dir": "C:\\consul\\data",
+    "log_level": "INFO",
+    "node_name": "stock-management-node",
+    "server": true,
+    "bootstrap_expect": 1,
+    "ui": true,
+    "client_addr": "0.0.0.0",
+    "bind_addr": "127.0.0.1",
+    "ports": {
+        "http": 8500,
+        "dns": 8600,
+        "serf_lan": 8301,
+        "serf_wan": 8302,
+        "server": 8300
+    },
+    "performance": {
+        "raft_multiplier": 1
+    },
+    "enable_syslog": false,
+    "rejoin_after_leave": true,
+    "enable_script_checks": false
+}
