@@ -1,0 +1,14 @@
+{
+    "name": "microservices-tools",
+    "version": "1.0.0",
+    "description": "Database migration and verification tools",
+    "type": "module",
+    "scripts": {
+        "migrate": "node migrate-databases.js",
+        "verify": "node verify-database-separation.js"
+    },
+    "dependencies": {
+        "mongoose": "^8.0.0",
+        "dotenv": "^16.3.1"
+    }
+}

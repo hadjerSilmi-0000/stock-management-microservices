@@ -1,4 +1,8 @@
-// services/stock/src/routes/stockRoutes.js
+/**
+ * Stock Routes
+ * services/stock/src/routes/stockRoutes.js
+ */
+
 import express from "express";
 import {
     addStockEntry,
@@ -12,9 +16,13 @@ import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { roleMiddleware } from "../middlewares/roleMiddleware.js";
 import { validateRequest } from "../middlewares/validationMiddleware.js";
 import { stockEntrySchema, stockExitSchema } from "../validations/stockValidation.js";
+import { getAllCircuitBreakerStats } from "../../shared/utils/circuitBreaker.js";
 
 const router = express.Router();
 
+// ─── Health ───────────────────────────────────────────────────────────────────
+
+// Basic service health (public — used by Consul / Traefik)
 router.get("/health", (req, res) => {
     res.json({
         status: "UP",
@@ -24,7 +32,29 @@ router.get("/health", (req, res) => {
     });
 });
 
-// Add stock entry
+// Circuit breaker health (admin only)
+router.get(
+    "/health/circuit-breakers",
+    authMiddleware,
+    roleMiddleware("admin"),
+    (req, res) => {
+        const stats = getAllCircuitBreakerStats();
+
+        // Determine overall status
+        const anyOpen = Object.values(stats).some((s) => s.state === "OPEN");
+        const anyHalf = Object.values(stats).some((s) => s.state === "HALF_OPEN");
+
+        res.json({
+            success: true,
+            status: anyOpen ? "DEGRADED" : anyHalf ? "RECOVERING" : "HEALTHY",
+            circuitBreakers: stats,
+            timestamp: new Date().toISOString(),
+        });
+    }
+);
+
+// ─── Stock Operations ─────────────────────────────────────────────────────────
+
 router.post(
     "/entry",
     authMiddleware,
@@ -33,7 +63,6 @@ router.post(
     addStockEntry
 );
 
-// Remove stock (exit)
 router.post(
     "/exit",
     authMiddleware,
@@ -42,7 +71,6 @@ router.post(
     removeStockExit
 );
 
-// Get stock level for a specific product
 router.get(
     "/product/:id",
     authMiddleware,
@@ -50,7 +78,6 @@ router.get(
     getProductStockLevel
 );
 
-// Get stock movement history
 router.get(
     "/movements",
     authMiddleware,
@@ -58,7 +85,6 @@ router.get(
     getStockMovements
 );
 
-// Get low stock alerts
 router.get(
     "/alerts",
     authMiddleware,
@@ -66,7 +92,6 @@ router.get(
     getLowStockAlerts
 );
 
-// Get stock summary/statistics
 router.get(
     "/summary",
     authMiddleware,
