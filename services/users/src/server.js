@@ -2,39 +2,77 @@
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
 import cookieParser from "cookie-parser";
 import { connectDB, swaggerServe, swaggerSetup } from "./config/index.js";
 import userRoutes from "./routes/userRoutes.js";
 import { errorHandler } from "./middlewares/errorMiddleware.js";
+import { requestIdMiddleware } from "../shared/middlewares/requestId.js";
+import {
+    requestLogger,
+    performanceMonitor,
+    extractClientIP
+} from "./middlewares/requestLogger.js";
+import { getCorsOptions } from "../shared/config/cors.js";
+import { validateServiceKeys } from "../shared/config/serviceKeys.js";
 
 import ConsulClient from "../shared/utils/consulClient.js";
 import RabbitMQClient from "../shared/utils/rabbitmqClient.js";
 import { EXCHANGES } from "../shared/events/eventTypes.js";
+import mongoose from "mongoose";
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load .env
+const envPath = path.resolve(__dirname, "../.env");
+const result = dotenv.config({ path: envPath });
+
+if (result.error) {
+    console.error("WARNING: Could not load .env file from:", envPath);
+    console.error("   Error:", result.error.message);
+    console.error("   Falling back to process environment variables");
+}
+
+// Validate critical variables
+const requiredVars = ['MONGO_URI', 'JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET'];
+const missing = requiredVars.filter(v => !process.env[v]);
+
+if (missing.length > 0) {
+    console.error("ERROR: Missing required environment variables:", missing.join(', '));
+    process.exit(1);
+}
+
+// Validate service keys
+try {
+    validateServiceKeys();
+} catch (error) {
+    console.error('Service key validation failed:', error.message);
+    if (process.env.NODE_ENV === 'production') {
+        process.exit(1);
+    }
+}
 
 // Create Express app
 const app = express();
 
-// MICROSERVICES CORS CONFIGURATION
-const allowedOrigins = [
-    "http://localhost:3000", // Frontend (React production build)
-    "http://localhost:5173", // Frontend (Vite dev server)
-    "http://localhost:5002", // Products microservice
-    "http://localhost:5003", // Stock microservice
-    "http://localhost:5004", // Suppliers microservice
-    process.env.FRONTEND_URL, // Production frontend URL
-].filter(Boolean);
+// CORS Configuration (using shared)
+app.use(cors(getCorsOptions()));
 
-app.use(cors({ origin: allowedOrigins, credentials: true }));
+// Middleware stack
+app.use(requestIdMiddleware);
+app.use(extractClientIP);
+app.use(requestLogger);
+app.use(performanceMonitor);
 app.use(express.json());
 app.use(cookieParser());
 
 // Swagger documentation
 app.use("/api-docs", swaggerServe, swaggerSetup);
 
-// API ROUTES
-app.use("/api/users", userRoutes);
+// API Routes (with versioning)
+app.use("/api/v1/users", userRoutes);
 
 // Root health check
 app.get("/", (req, res) => {
@@ -46,7 +84,7 @@ app.get("/", (req, res) => {
     });
 });
 
-// ERROR HANDLER
+// Error Handler
 app.use(errorHandler);
 
 // RabbitMQ Setup
@@ -61,14 +99,16 @@ async function setupRabbitMQ() {
     }
 }
 
-// SERVER STARTUP
+// Start Server
 const PORT = process.env.PORT || 5001;
+let server;
+
 connectDB()
     .then(async () => {
-        app.listen(PORT, async () => {
+        server = app.listen(PORT, async () => {
             console.log(`Users Service running on http://localhost:${PORT}`);
             console.log(`API Documentation: http://localhost:${PORT}/api-docs`);
-            console.log(`Health Check: http://localhost:${PORT}/api/users/health`);
+            console.log(`Health Check: http://localhost:${PORT}/api/v1/users/health`);
 
             // Setup RabbitMQ
             await setupRabbitMQ();
@@ -78,7 +118,7 @@ connectDB()
             const consulClient = new ConsulClient(
                 SERVICE_NAME,
                 PORT,
-                `/api/${SERVICE_NAME.split("-")[0]}/health`
+                `/api/v1/${SERVICE_NAME.split("-")[0]}/health`
             );
             await consulClient.register();
         });
@@ -87,5 +127,36 @@ connectDB()
         console.error("Failed to connect to MongoDB:", err);
         process.exit(1);
     });
+
+// Graceful shutdown handler
+const gracefulShutdown = async (signal) => {
+    console.log(`\n${signal} received. Starting graceful shutdown...`);
+
+    if (server) {
+        server.close(() => {
+            console.log('HTTP server closed');
+        });
+    }
+
+    try {
+        // Close database
+        await mongoose.connection.close();
+        console.log('MongoDB connection closed');
+
+        // Close RabbitMQ if used
+        if (rabbitMQ && rabbitMQ.isConnected) {
+            await rabbitMQ.close();
+            console.log('RabbitMQ connection closed');
+        }
+
+        process.exit(0);
+    } catch (error) {
+        console.error('Error during shutdown:', error);
+        process.exit(1);
+    }
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 export { rabbitMQ };

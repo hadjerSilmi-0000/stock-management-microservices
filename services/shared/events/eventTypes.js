@@ -1,13 +1,3 @@
-/**
- * Event Types and Exchanges for Microservices
- * Place in: services/shared/events/eventTypes.js
- */
-
-// =========================================================================
-// EVENT NAMES
-// Use dot notation: entity.action
-// =========================================================================
-
 export const EVENTS = {
     // ===== PRODUCT EVENTS =====
     PRODUCT_CREATED: 'product.created',

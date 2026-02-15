@@ -170,12 +170,15 @@ const userService = {
     },
 
     async updatePassword(userId, newPassword) {
-        const hashed = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
-        await User.findByIdAndUpdate(userId, {
-            password: hashed,
-            passwordResetToken: undefined,
-            passwordResetExpires: undefined,
-        });
+        const user = await User.findById(userId).select('+password');
+
+        if (!user) {
+            throw new Error('User not found');
+        }
+        user.password = newPassword;
+        user.passwordResetToken = undefined;
+        user.passwordResetExpires = undefined;
+        await user.save();
     },
 };
 

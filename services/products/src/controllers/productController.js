@@ -12,6 +12,35 @@ import {
     BadRequestError,
     asyncHandler,
 } from "../utils/errors.js";
+import { getCircuitBreaker } from "../../shared/utils/circuitBreaker.js";
+
+const SUPPLIERS_SERVICE_URL = process.env.SUPPLIERS_SERVICE_URL || "http://localhost:5004";
+
+// Circuit breaker for suppliers service
+const suppliersBreaker = getCircuitBreaker('suppliers-service', {
+    timeout: 3000,
+    errorThresholdPercentage: 50,
+}, () => ({
+    _isFallback: true,
+    name: "Unknown Supplier",
+    contactPerson: "N/A",
+    email: "N/A"
+}));
+
+// Helper function to get supplier info
+async function getSupplierInfo(supplierId, token) {
+    try {
+        const data = await suppliersBreaker.execute({
+            method: 'GET',
+            url: `${SUPPLIERS_SERVICE_URL}/api/v1/suppliers/${supplierId}`,
+            headers: { Cookie: `accessToken=${token}` }
+        });
+        return data?.supplier || null;
+    } catch (error) {
+        logger.error(`Error fetching supplier ${supplierId}:`, error.message);
+        return null;
+    }
+}
 
 // @desc    Create new product
 // @route   POST /api/v1/products

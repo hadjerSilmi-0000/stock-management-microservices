@@ -1,10 +1,3 @@
-/**
- * Database Separation Verification Script
- * Tests that each service has its own isolated database
- * 
- * Run: node tools/verify-database-separation.js
- */
-
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
@@ -38,31 +31,31 @@ const services = {
 };
 
 async function verifyService(serviceKey, config) {
-    console.log(`\n🔍 Verifying ${config.name} Service...`);
+    console.log(`\n Verifying ${config.name} Service...`);
 
     // Load env file
     const envConfig = dotenv.config({ path: config.envPath });
 
     if (envConfig.error) {
-        console.log(`   ❌ Failed to load .env file: ${config.envPath}`);
+        console.log(`    Failed to load .env file: ${config.envPath}`);
         return false;
     }
 
     const mongoUri = envConfig.parsed.MONGO_URI;
 
     if (!mongoUri) {
-        console.log(`   ❌ MONGO_URI not found in .env`);
+        console.log(`    MONGO_URI not found in .env`);
         return false;
     }
 
-    console.log(`   📍 Database: ${mongoUri}`);
+    console.log(`    Database: ${mongoUri}`);
 
     // Extract database name from URI
     const dbName = mongoUri.split('/').pop().split('?')[0];
     const expectedDbName = `${serviceKey}_db`;
 
     if (dbName !== expectedDbName) {
-        console.log(`   ⚠️  Warning: Database name is '${dbName}', expected '${expectedDbName}'`);
+        console.log(`     Warning: Database name is '${dbName}', expected '${expectedDbName}'`);
     }
 
     try {
@@ -73,7 +66,7 @@ async function verifyService(serviceKey, config) {
         const collections = await conn.db.listCollections().toArray();
         const collectionNames = collections.map(c => c.name);
 
-        console.log(`   📚 Collections found: ${collectionNames.length > 0 ? collectionNames.join(', ') : 'none'}`);
+        console.log(`    Collections found: ${collectionNames.length > 0 ? collectionNames.join(', ') : 'none'}`);
 
         // Check for expected collections
         const missingCollections = config.expectedCollections.filter(
@@ -81,7 +74,7 @@ async function verifyService(serviceKey, config) {
         );
 
         if (missingCollections.length > 0) {
-            console.log(`   ⚠️  Missing collections: ${missingCollections.join(', ')}`);
+            console.log(`     Missing collections: ${missingCollections.join(', ')}`);
         }
 
         // Check for unexpected collections (from other services)
@@ -93,8 +86,8 @@ async function verifyService(serviceKey, config) {
         );
 
         if (unexpectedCollections.length > 0) {
-            console.log(`   ❌ Found collections from other services: ${unexpectedCollections.join(', ')}`);
-            console.log(`   ⚠️  Database separation is NOT properly configured!`);
+            console.log(`    Found collections from other services: ${unexpectedCollections.join(', ')}`);
+            console.log(`     Database separation is NOT properly configured!`);
             await conn.close();
             return false;
         }
@@ -106,17 +99,17 @@ async function verifyService(serviceKey, config) {
             documentCounts[collectionName] = count;
         }
 
-        console.log(`   📊 Document counts:`);
+        console.log(`    Document counts:`);
         for (const [col, count] of Object.entries(documentCounts)) {
             console.log(`      ${col}: ${count}`);
         }
 
         await conn.close();
-        console.log(`   ✅ ${config.name} database is properly isolated`);
+        console.log(`    ${config.name} database is properly isolated`);
         return true;
 
     } catch (error) {
-        console.log(`   ❌ Error connecting to database:`, error.message);
+        console.log(`    Error connecting to database:`, error.message);
         return false;
     }
 }
@@ -136,7 +129,7 @@ async function checkDatabaseUniqueness() {
         const dbName = mongoUri.split('/').pop().split('?')[0];
 
         if (databases[dbName]) {
-            console.log(`   ❌ Database '${dbName}' is used by multiple services:`);
+            console.log(`    Database '${dbName}' is used by multiple services:`);
             console.log(`      - ${databases[dbName]}`);
             console.log(`      - ${config.name}`);
             return false;
@@ -145,8 +138,8 @@ async function checkDatabaseUniqueness() {
         databases[dbName] = config.name;
     }
 
-    console.log(`   ✅ All services use unique databases`);
-    console.log(`   📊 Databases in use:`);
+    console.log(`    All services use unique databases`);
+    console.log(`    Databases in use:`);
     for (const [dbName, serviceName] of Object.entries(databases)) {
         console.log(`      ${dbName} → ${serviceName}`);
     }
@@ -187,15 +180,15 @@ async function verify() {
         console.log(`\nDatabase Uniqueness: ${uniqueDbsResult ? '✅' : '❌'}`);
 
         if (allPassed) {
-            console.log('\n🎉 All checks passed! Database separation is correctly configured.');
+            console.log('\n All checks passed! Database separation is correctly configured.');
         } else {
-            console.log('\n⚠️  Some checks failed. Please review the issues above.');
+            console.log('\n  Some checks failed. Please review the issues above.');
         }
 
         process.exit(allPassed ? 0 : 1);
 
     } catch (error) {
-        console.error('\n❌ Verification failed:', error.message);
+        console.error('\n Verification failed:', error.message);
         console.error(error.stack);
         process.exit(1);
     }

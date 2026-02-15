@@ -1,9 +1,11 @@
 /**
- * Stock Controller
- * All inter-service calls go through circuit breakers so a downstream
- * failure (Products service down) never crashes the Stock service.
- *
- * services/stock/src/controllers/stockController.js
+ * Stock Controller with Event Publishing
+ * File: services/stock/src/controllers/stockController.js
+ * 
+ * CHANGES:
+ * - Import rabbitMQ from server.js
+ * - Publish stock events after operations
+ * - Publish alerts for low/critical/out-of-stock
  */
 
 import StockMovement, { MOVEMENT_TYPES } from "../models/stockMovementModel.js";
@@ -12,13 +14,13 @@ import logger from "../utils/logger.js";
 import { getCircuitBreaker } from "../../shared/utils/circuitBreaker.js";
 import { asyncHandler } from "../utils/errors.js";
 
-const PRODUCTS_SERVICE_URL =
-    process.env.PRODUCTS_SERVICE_URL || "http://localhost:5002";
+// ✅ NEW: Import RabbitMQ and events
+import { rabbitMQ } from "../server.js";
+import { EVENTS, EXCHANGES, createEvent } from "../../shared/events/eventTypes.js";
 
-// ─── Circuit Breakers ────────────────────────────────────────────────────────
-// Defined once at module level so the state (OPEN/CLOSED) persists across
-// requests and stats keep accumulating.
+const PRODUCTS_SERVICE_URL = process.env.PRODUCTS_SERVICE_URL || "http://localhost:5002";
 
+// Circuit Breaker
 const productsBreaker = getCircuitBreaker(
     "products-service",
     {
@@ -27,7 +29,6 @@ const productsBreaker = getCircuitBreaker(
         resetTimeout: 30000,
         volumeThreshold: 3,
     },
-    // Fallback: return a minimal object so the stock operation can continue
     () => ({
         _isFallback: true,
         name: "Unknown (products-service unavailable)",
@@ -36,35 +37,21 @@ const productsBreaker = getCircuitBreaker(
     })
 );
 
-// ─── Helper ──────────────────────────────────────────────────────────────────
-/**
- * Fetch product info from the Products service.
- * Returns fallback object if the circuit is open or the call fails.
- */
+// Helper: Fetch product info
 async function getProductInfo(productId, token) {
     try {
         const data = await productsBreaker.execute({
             method: "GET",
             url: `${PRODUCTS_SERVICE_URL}/api/products/${productId}`,
-            headers: {
-                Cookie: `accessToken=${token}`,
-            },
+            headers: { Cookie: `accessToken=${token}` },
             timeout: 5000,
         });
-
-        // Products service returns { success, data: product }
         return data?.data || data?.product || null;
     } catch (error) {
-        logger.error(
-            `[StockController] getProductInfo failed for ${productId}: ${error.message}`
-        );
-        // Fallback already handled by circuit breaker — if we reach here
-        // the fallback itself threw (shouldn't happen with our config).
+        logger.error(`getProductInfo failed for ${productId}: ${error.message}`);
         return null;
     }
 }
-
-// ─── Controllers ─────────────────────────────────────────────────────────────
 
 // @desc    Add stock entry
 // @route   POST /api/stock/entry
@@ -75,8 +62,6 @@ export const addStockEntry = asyncHandler(async (req, res) => {
     const token = req.cookies?.accessToken;
     const product = await getProductInfo(productId, token);
 
-    // If fallback was used, _isFallback is true — product exists but service
-    // is down. We still allow the stock operation to proceed.
     if (!product) {
         return res.status(404).json({
             success: false,
@@ -85,12 +70,11 @@ export const addStockEntry = asyncHandler(async (req, res) => {
     }
 
     if (product._isFallback) {
-        logger.warn(
-            `[StockController] addStockEntry: using fallback for product ${productId}`
-        );
+        logger.warn(`addStockEntry: using fallback for product ${productId}`);
     }
 
     const stockLevel = await StockLevel.getOrCreate(productId);
+    const previousQuantity = stockLevel.currentQuantity;
 
     const movement = await StockMovement.create({
         productId,
@@ -103,9 +87,27 @@ export const addStockEntry = asyncHandler(async (req, res) => {
 
     await stockLevel.updateQuantity(quantity);
 
-    logger.info(
-        `Stock entry: ${quantity} units of ${productId} by user ${req.user.id}`
-    );
+    logger.info(`Stock entry: ${quantity} units of ${productId} by user ${req.user.id}`);
+
+    // ✅ NEW: Publish STOCK_MOVEMENT_IN event
+    try {
+        const event = createEvent(EVENTS.STOCK_MOVEMENT_IN, {
+            productId: productId,
+            sku: product.sku || "N/A",
+            quantity,
+            previousQuantity,
+            newQuantity: stockLevel.currentQuantity,
+            location: "Main Warehouse",
+            reason,
+            reference,
+            performedBy: req.user.id,
+        });
+
+        await rabbitMQ.publish(EXCHANGES.STOCK, EVENTS.STOCK_MOVEMENT_IN, event);
+        logger.info(`Event published: STOCK_MOVEMENT_IN for ${productId}`);
+    } catch (error) {
+        logger.error(`Failed to publish STOCK_MOVEMENT_IN event: ${error.message}`);
+    }
 
     res.status(201).json({
         success: true,
@@ -135,12 +137,11 @@ export const removeStockExit = asyncHandler(async (req, res) => {
     }
 
     if (product._isFallback) {
-        logger.warn(
-            `[StockController] removeStockExit: using fallback for product ${productId}`
-        );
+        logger.warn(`removeStockExit: using fallback for product ${productId}`);
     }
 
     const stockLevel = await StockLevel.getOrCreate(productId);
+    const previousQuantity = stockLevel.currentQuantity;
 
     if (stockLevel.currentQuantity < quantity) {
         return res.status(400).json({
@@ -162,9 +163,75 @@ export const removeStockExit = asyncHandler(async (req, res) => {
 
     await stockLevel.updateQuantity(-quantity);
 
-    logger.info(
-        `Stock exit: ${quantity} units of ${productId} by user ${req.user.id}`
-    );
+    logger.info(`Stock exit: ${quantity} units of ${productId} by user ${req.user.id}`);
+
+    // ✅ NEW: Publish STOCK_MOVEMENT_OUT event
+    try {
+        const event = createEvent(EVENTS.STOCK_MOVEMENT_OUT, {
+            productId: productId,
+            sku: product.sku || "N/A",
+            quantity,
+            previousQuantity,
+            newQuantity: stockLevel.currentQuantity,
+            location: "Main Warehouse",
+            reason,
+            reference,
+            performedBy: req.user.id,
+        });
+
+        await rabbitMQ.publish(EXCHANGES.STOCK, EVENTS.STOCK_MOVEMENT_OUT, event);
+        logger.info(`Event published: STOCK_MOVEMENT_OUT for ${productId}`);
+    } catch (error) {
+        logger.error(`Failed to publish STOCK_MOVEMENT_OUT event: ${error.message}`);
+    }
+
+    // ✅ NEW: Check for low/critical/out-of-stock conditions
+    try {
+        const threshold = product.lowStockThreshold || 10;
+        const newQuantity = stockLevel.currentQuantity;
+
+        if (newQuantity === 0) {
+            // Out of stock
+            const outEvent = createEvent(EVENTS.STOCK_OUT, {
+                productId: productId,
+                sku: product.sku || "N/A",
+                name: product.name || "Unknown",
+                location: "Main Warehouse",
+            });
+            await rabbitMQ.publish(EXCHANGES.STOCK, EVENTS.STOCK_OUT, outEvent);
+            logger.warn(`🚨 STOCK OUT: ${product.sku}`);
+
+        } else if (newQuantity <= threshold / 2) {
+            // Critical stock
+            const criticalEvent = createEvent(EVENTS.STOCK_CRITICAL, {
+                productId: productId,
+                sku: product.sku || "N/A",
+                name: product.name || "Unknown",
+                currentQuantity: newQuantity,
+                minimumStock: threshold,
+                location: "Main Warehouse",
+                severity: "critical",
+            });
+            await rabbitMQ.publish(EXCHANGES.STOCK, EVENTS.STOCK_CRITICAL, criticalEvent);
+            logger.warn(`🔴 CRITICAL STOCK: ${product.sku} - ${newQuantity} units remaining`);
+
+        } else if (newQuantity <= threshold) {
+            // Low stock
+            const lowEvent = createEvent(EVENTS.STOCK_LOW, {
+                productId: productId,
+                sku: product.sku || "N/A",
+                name: product.name || "Unknown",
+                currentQuantity: newQuantity,
+                minimumStock: threshold,
+                location: "Main Warehouse",
+                severity: "low",
+            });
+            await rabbitMQ.publish(EXCHANGES.STOCK, EVENTS.STOCK_LOW, lowEvent);
+            logger.warn(`🟡 LOW STOCK: ${product.sku} - ${newQuantity} units remaining`);
+        }
+    } catch (error) {
+        logger.error(`Failed to publish stock alert events: ${error.message}`);
+    }
 
     res.status(201).json({
         success: true,
@@ -239,7 +306,6 @@ export const getLowStockAlerts = asyncHandler(async (req, res) => {
     const lowStockItems = await StockLevel.getLowStock(threshold);
     const token = req.cookies?.accessToken;
 
-    // Use Promise.allSettled so one failed lookup doesn't abort everything
     const settled = await Promise.allSettled(
         lowStockItems.map(async (item) => {
             const product = await getProductInfo(item.productId, token);
@@ -273,9 +339,7 @@ export const getLowStockAlerts = asyncHandler(async (req, res) => {
 // @route   GET /api/stock/summary
 // @access  Private (Admin, Manager)
 export const getStockSummary = asyncHandler(async (req, res) => {
-    const threshold =
-        parseInt(process.env.DEFAULT_LOW_STOCK_THRESHOLD) || 10;
-
+    const threshold = parseInt(process.env.DEFAULT_LOW_STOCK_THRESHOLD) || 10;
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
     const [totalProducts, totalQuantityAgg, lowStockCount, recentMovementsCount] =
@@ -297,5 +361,4 @@ export const getStockSummary = asyncHandler(async (req, res) => {
     });
 });
 
-// ─── Export breaker for health route ─────────────────────────────────────────
 export { productsBreaker };

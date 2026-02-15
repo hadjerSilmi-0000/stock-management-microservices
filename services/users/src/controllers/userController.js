@@ -3,8 +3,9 @@ import Session from "../models/sessionModel.js";
 import User, { USER_STATUS } from "../models/userModel.js";
 import { JWTManager } from "../config/jwt.js";
 import jwt from "jsonwebtoken";
+import { asyncHandler } from "../utils/errors.js";
 
-//  Get current user (via access token)
+// Get current user (via access token)
 export const getCurrentUser = async (req, res) => {
     try {
         const token = req.cookies?.accessToken;
@@ -32,7 +33,7 @@ export const getCurrentUser = async (req, res) => {
     }
 };
 
-//  Register new user
+// Register new user
 export const register = async (req, res, next) => {
     try {
         const { username, email, password, role } = req.body;
@@ -56,7 +57,7 @@ export const register = async (req, res, next) => {
     }
 };
 
-//  Login
+// Login
 export const login = async (req, res, next) => {
     try {
         const { email, password } = req.body;
@@ -96,7 +97,7 @@ export const login = async (req, res, next) => {
     }
 };
 
-//  Refresh Token
+// Refresh Token
 export const refreshToken = async (req, res, next) => {
     try {
         const refreshTokenCookie = req.cookies.refreshToken;
@@ -124,7 +125,7 @@ export const refreshToken = async (req, res, next) => {
     }
 };
 
-//  Verify email
+// Verify email
 export const verifyEmail = async (req, res, next) => {
     try {
         const token = req.params.token || req.query.token;
@@ -135,7 +136,7 @@ export const verifyEmail = async (req, res, next) => {
     }
 };
 
-//  Resend verification
+// Resend verification
 export const resendVerification = async (req, res, next) => {
     try {
         const { email } = req.body;
@@ -146,7 +147,7 @@ export const resendVerification = async (req, res, next) => {
     }
 };
 
-//  Forgot password
+// Forgot password
 export const forgotPassword = async (req, res, next) => {
     try {
         const { email } = req.body;
@@ -162,7 +163,7 @@ export const forgotPassword = async (req, res, next) => {
     }
 };
 
-//  Reset password
+// Reset password
 export const resetPassword = async (req, res, next) => {
     try {
         const { token, password } = req.body;
@@ -174,34 +175,30 @@ export const resetPassword = async (req, res, next) => {
     }
 };
 
-//  Get profile (protected)
-export const getProfile = async (req, res) => {
+// Get profile (protected) - SIMPLE, can use asyncHandler
+export const getProfile = asyncHandler(async (req, res) => {
     res.json({ success: true, user: req.user });
-};
+});
 
-//  Update profile
-export const updateProfile = async (req, res, next) => {
-    try {
-        const allowed = ["username", "email"];
-        const updates = {};
+// Update profile - SIMPLE, can use asyncHandler
+export const updateProfile = asyncHandler(async (req, res) => {
+    const allowed = ["username", "email"];
+    const updates = {};
 
-        for (let key of allowed) {
-            if (req.body[key] !== undefined) updates[key] = req.body[key];
-        }
-
-        const user = await User.findByIdAndUpdate(req.user._id, updates, {
-            new: true,
-            runValidators: true,
-        }).select("-password");
-
-        if (!user) return res.status(404).json({ success: false, message: "User not found" });
-        res.json({ success: true, user });
-    } catch (err) {
-        next(err);
+    for (let key of allowed) {
+        if (req.body[key] !== undefined) updates[key] = req.body[key];
     }
-};
 
-//  Change password
+    const user = await User.findByIdAndUpdate(req.user._id, updates, {
+        new: true,
+        runValidators: true,
+    }).select("-password");
+
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+    res.json({ success: true, user });
+});
+
+// Change password
 export const changePassword = async (req, res, next) => {
     try {
         const { currentPassword, newPassword } = req.body;
@@ -218,7 +215,7 @@ export const changePassword = async (req, res, next) => {
     }
 };
 
-//  Logout
+// Logout
 export const logout = async (req, res, next) => {
     try {
         const userId = req.user?._id;
@@ -265,7 +262,7 @@ export const logout = async (req, res, next) => {
 };
 
 // ADMIN USER MANAGEMENT
-//  Get all users (admin only)
+// Get all users (admin only)
 export const getAllUsers = async (req, res, next) => {
     try {
         const users = await User.find()
@@ -282,7 +279,7 @@ export const getAllUsers = async (req, res, next) => {
     }
 };
 
-//  Get single user by ID (admin only)
+// Get single user by ID (admin only)
 export const getUserById = async (req, res, next) => {
     try {
         const user = await User.findById(req.params.id)
@@ -301,7 +298,7 @@ export const getUserById = async (req, res, next) => {
     }
 };
 
-//  Update user (admin only)
+// Update user (admin only)
 export const updateUser = async (req, res, next) => {
     try {
         const allowedUpdates = ['username', 'email', 'role', 'status', 'emailVerified'];
@@ -340,7 +337,7 @@ export const updateUser = async (req, res, next) => {
     }
 };
 
-//  Delete user (admin only - soft delete)
+// Delete user (admin only - soft delete)
 export const deleteUser = async (req, res, next) => {
     try {
         // Prevent admin from deleting themselves

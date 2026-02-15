@@ -1,31 +1,19 @@
-/**
- * Circuit Breaker Test Script
- * Simulates Products service going down while Stock service keeps running.
- *
- * HOW TO USE:
- *   1. Start all services normally
- *   2. Login and copy your accessToken cookie value
- *   3. Run:  node tools/test-circuit-breaker.js <your_access_token>
- *   4. While it runs, stop the Products service to watch the circuit open
- *   5. Restart Products service to watch it recover
- */
-
 import axios from "axios";
 
 const TOKEN = process.argv[2] || "";
 const STOCK_URL = "http://localhost:5003";
-const DELAY_MS = 2000; // 2 seconds between requests
+const DELAY_MS = 2000;
 const TOTAL_CALLS = 20;
 
 if (!TOKEN) {
-    console.error("❌ Usage: node test-circuit-breaker.js <accessToken>");
+    console.error(" Usage: node test-circuit-breaker.js <accessToken>");
     console.error("   Get your token by logging in first.");
     process.exit(1);
 }
 
 const headers = { Cookie: `accessToken=${TOKEN}` };
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+
 function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -86,7 +74,7 @@ async function run() {
     console.log("─".repeat(55));
 
     for (let i = 1; i <= TOTAL_CALLS; i++) {
-        console.log(`\n📞 Call #${i}/${TOTAL_CALLS}`);
+        console.log(`\n Call #${i}/${TOTAL_CALLS}`);
 
         // 1. Check circuit breaker status
         const cbStatus = await getCircuitBreakerStatus();
@@ -95,7 +83,7 @@ async function run() {
             if (cb) {
                 console.log(`   Circuit State : ${formatState(cb.state)}`);
                 console.log(
-                    `   Stats         : ✅ ${cb.successes} successes  ❌ ${cb.failures} failures  ⛔ ${cb.rejects} rejects`
+                    `   Stats         :  ${cb.successes} successes   ${cb.failures} failures   ${cb.rejects} rejects`
                 );
             }
         }
@@ -103,28 +91,28 @@ async function run() {
         // 2. Hit an endpoint that calls Products service
         const alertResult = await testLowStockAlerts();
         if (alertResult.success) {
-            console.log(`   /alerts       : ✅ OK (${alertResult.count} alerts)`);
+            console.log(`   /alerts       :  OK (${alertResult.count} alerts)`);
             if (alertResult.warning) {
-                console.log(`   ⚠️  Warning    : ${alertResult.warning}`);
+                console.log(`     Warning    : ${alertResult.warning}`);
             }
         } else {
-            console.log(`   /alerts       : ❌ FAILED [${alertResult.status}] ${alertResult.message}`);
+            console.log(`   /alerts       :  FAILED [${alertResult.status}] ${alertResult.message}`);
         }
 
         // 3. Hit an endpoint that does NOT call Products service
         const summaryResult = await testStockSummary();
         if (summaryResult.success) {
-            console.log(`   /summary      : ✅ OK (stock-only endpoint — always works)`);
+            console.log(`   /summary      :  OK (stock-only endpoint — always works)`);
         } else {
-            console.log(`   /summary      : ❌ FAILED ${summaryResult.message}`);
+            console.log(`   /summary      :  FAILED ${summaryResult.message}`);
         }
 
         // Prompt reminders
         if (i === 5) {
-            console.log("\n   ⬆️  NOW STOP the Products service! (Ctrl+C in that terminal)");
+            console.log("\n   NOW STOP the Products service! (Ctrl+C in that terminal)");
         }
         if (i === 13) {
-            console.log("\n   ⬆️  NOW RESTART the Products service!");
+            console.log("\n   NOW RESTART the Products service!");
         }
 
         if (i < TOTAL_CALLS) {
@@ -133,7 +121,7 @@ async function run() {
     }
 
     console.log("\n" + "─".repeat(55));
-    console.log("✅ Test complete!\n");
+    console.log(" Test complete!\n");
 
     // Final status
     const finalStatus = await getCircuitBreakerStatus();

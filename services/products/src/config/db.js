@@ -1,26 +1,14 @@
-import mongoose from "mongoose";
+import { connectWithRetry, disconnectDB } from "../../shared/utils/dbConnection.js";
 
 export const connectDB = async () => {
-    try {
-        const mongoUri = process.env.MONGO_URI;
+    const mongoUri = process.env.MONGO_URI;
 
-        if (!mongoUri) {
-            throw new Error("MONGO_URI not found in environment variables");
-        }
-
-        await mongoose.connect(mongoUri);
-        console.log(" MongoDB connected successfully to:", mongoUri);
-    } catch (err) {
-        console.error(` MongoDB connection error: ${err.message}`);
-        process.exit(1);
+    if (!mongoUri) {
+        throw new Error("MONGO_URI not found in environment variables");
     }
+
+    const serviceName = process.env.SERVICE_NAME || "products-service";
+    return await connectWithRetry(mongoUri, serviceName);
 };
 
-export const disconnectDB = async () => {
-    try {
-        await mongoose.disconnect();
-        console.log("MongoDB disconnected");
-    } catch (err) {
-        console.error(`Error disconnecting DB: ${err.message}`);
-    }
-};
+export { disconnectDB };

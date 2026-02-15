@@ -8,7 +8,7 @@ api:
   dashboard: true
   insecure: true  # ONLY for development - disable in production
 
-# Entry Points (where Traefik listens)
+# Entry Points 
 entryPoints:
   # HTTP entry point for all microservices
   web:
