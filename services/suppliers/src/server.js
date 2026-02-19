@@ -17,6 +17,7 @@ import {
 } from "./middlewares/requestLogger.js";
 import { getCorsOptions } from "../shared/config/cors.js";
 import { validateServiceKeys } from "../shared/config/serviceKeys.js";
+import { setupSuppliersEventSubscribers } from "./events/subscribers.js"; // ✅ ADDED
 
 import ConsulClient from "../shared/utils/consulClient.js";
 import RabbitMQClient from "../shared/utils/rabbitmqClient.js";
@@ -26,7 +27,6 @@ import mongoose from "mongoose";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load .env
 const envPath = path.resolve(__dirname, "../.env");
 const result = dotenv.config({ path: envPath });
 
@@ -36,13 +36,11 @@ if (result.error) {
     console.error("   Falling back to process environment variables");
 }
 
-// Verify MONGO_URI
 if (!process.env.MONGO_URI) {
     console.error("ERROR: MONGO_URI not found in .env file!");
     process.exit(1);
 }
 
-// Validate service keys
 try {
     validateServiceKeys();
 } catch (error) {
@@ -52,13 +50,9 @@ try {
     }
 }
 
-// Express app
 const app = express();
 
-// CORS Configuration (using shared)
 app.use(cors(getCorsOptions()));
-
-// Middleware stack
 app.use(requestIdMiddleware);
 app.use(extractClientIP);
 app.use(requestLogger);
@@ -66,13 +60,9 @@ app.use(performanceMonitor);
 app.use(express.json());
 app.use(cookieParser());
 
-// Swagger Documentation
 app.use("/api-docs", swaggerServe, swaggerSetup);
-
-// API Routes (with versioning)
 app.use("/api/v1/suppliers", supplierRoutes);
 
-// Root Health Check
 app.get("/", (req, res) => {
     res.json({
         service: "suppliers-service",
@@ -82,22 +72,25 @@ app.get("/", (req, res) => {
     });
 });
 
-// Error Handler
 app.use(errorHandler);
 
 // RabbitMQ Setup
 const rabbitMQ = new RabbitMQClient();
+
 async function setupRabbitMQ() {
     try {
         await rabbitMQ.connect();
         await rabbitMQ.createExchange(EXCHANGES.SUPPLIERS, "topic");
-        console.log("RabbitMQ connected");
+
+        // ✅ ADDED: wire up event subscribers
+        await setupSuppliersEventSubscribers(rabbitMQ);
+
+        console.log("✅ RabbitMQ connected and subscribers registered");
     } catch (error) {
         console.error("RabbitMQ failed:", error.message);
     }
 }
 
-// Start Server
 const PORT = process.env.PORT || 5004;
 let server;
 
@@ -108,10 +101,8 @@ connectDB()
             console.log(`API Documentation: http://localhost:${PORT}/api-docs`);
             console.log(`Health Check: http://localhost:${PORT}/api/v1/suppliers/health`);
 
-            // Setup RabbitMQ
             await setupRabbitMQ();
 
-            // Register with Consul
             const SERVICE_NAME = process.env.SERVICE_NAME || "suppliers-service";
             const consulClient = new ConsulClient(
                 SERVICE_NAME,
@@ -126,22 +117,17 @@ connectDB()
         process.exit(1);
     });
 
-// Graceful shutdown handler
 const gracefulShutdown = async (signal) => {
     console.log(`\n${signal} received. Starting graceful shutdown...`);
 
     if (server) {
-        server.close(() => {
-            console.log('HTTP server closed');
-        });
+        server.close(() => console.log('HTTP server closed'));
     }
 
     try {
-        // Close database
         await mongoose.connection.close();
         console.log('MongoDB connection closed');
 
-        // Close RabbitMQ if used
         if (rabbitMQ && rabbitMQ.isConnected) {
             await rabbitMQ.close();
             console.log('RabbitMQ connection closed');

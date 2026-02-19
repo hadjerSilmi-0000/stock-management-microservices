@@ -13,6 +13,8 @@ import {
     asyncHandler,
 } from "../utils/errors.js";
 import { getCircuitBreaker } from "../../shared/utils/circuitBreaker.js";
+import { rabbitMQ } from "../server.js";
+import { EVENTS, EXCHANGES, createEvent } from "../../shared/events/eventTypes.js";
 
 const SUPPLIERS_SERVICE_URL = process.env.SUPPLIERS_SERVICE_URL || "http://localhost:5004";
 
@@ -42,6 +44,17 @@ async function getSupplierInfo(supplierId, token) {
     }
 }
 
+// Helper to safely publish events (never crash the main flow)
+async function publishEvent(exchange, eventType, data) {
+    try {
+        const event = createEvent(eventType, data);
+        await rabbitMQ.publish(exchange, eventType, event);
+        logger.info(`✅ Event published: ${eventType}`);
+    } catch (error) {
+        logger.error(`❌ Failed to publish event ${eventType}: ${error.message}`);
+    }
+}
+
 // @desc    Create new product
 // @route   POST /api/v1/products
 // @access  Private (Admin, Manager)
@@ -66,6 +79,19 @@ export const createProduct = asyncHandler(async (req, res) => {
 
     logger.info(`Product created: ${product.sku} by user ${req.user.id}`);
 
+    // ✅ ADDED: Publish PRODUCT_CREATED event so stock service creates initial stock entry
+    await publishEvent(EXCHANGES.PRODUCTS, EVENTS.PRODUCT_CREATED, {
+        productId: product._id.toString(),
+        sku: product.sku,
+        name: product.name,
+        description: product.description,
+        category: product.category,
+        price: product.price,
+        supplierId: product.supplierId,
+        lowStockThreshold: product.lowStockThreshold,
+        createdBy: req.user.id,
+    });
+
     res.status(201).json({
         success: true,
         message: "Product created successfully",
@@ -74,25 +100,21 @@ export const createProduct = asyncHandler(async (req, res) => {
 });
 
 // @desc    Get all products with pagination, filtering, and sorting
-// @route   GET /api/v1/products?page=1&limit=20&category=Electronics&sort=-price
+// @route   GET /api/v1/products
 // @access  Private (Admin, Manager)
 export const getAllProducts = asyncHandler(async (req, res) => {
     const { page, limit, skip } = req.pagination;
 
-    // Build filter query
     const allowedFilters = ['category', 'sku', 'name', 'supplierId', 'isActive'];
     const filter = buildFilterQuery(req.query, allowedFilters);
 
-    // Role-based filtering
     if (req.user.role !== "admin") {
         filter.isActive = true;
     }
 
-    // Parse sort and fields
     const sort = parseSortParams(req.query.sort);
     const fields = parseFieldsParams(req.query.fields);
 
-    // Execute query
     const [products, total] = await Promise.all([
         Product.find(filter)
             .select(fields)
@@ -161,6 +183,14 @@ export const updateProduct = asyncHandler(async (req, res) => {
 
     logger.info(`Product updated: ${product.sku} by user ${req.user.id}`);
 
+    // ✅ ADDED: Publish PRODUCT_UPDATED event
+    await publishEvent(EXCHANGES.PRODUCTS, EVENTS.PRODUCT_UPDATED, {
+        productId: product._id.toString(),
+        sku: product.sku,
+        changes: updates,
+        updatedBy: req.user.id,
+    });
+
     res.json({
         success: true,
         message: "Product updated successfully",
@@ -181,6 +211,13 @@ export const deleteProduct = asyncHandler(async (req, res) => {
     await product.softDelete();
 
     logger.info(`Product soft-deleted: ${product.sku} by user ${req.user.id}`);
+
+    // ✅ ADDED: Publish PRODUCT_DELETED event so stock service removes stock entry
+    await publishEvent(EXCHANGES.PRODUCTS, EVENTS.PRODUCT_DELETED, {
+        productId: product._id.toString(),
+        sku: product.sku,
+        deletedBy: req.user.id,
+    });
 
     res.json({
         success: true,

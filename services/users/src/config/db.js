@@ -1,30 +1,14 @@
-import mongoose from "mongoose";
-import dotenv from "dotenv";
-import logger from "../utils/logger.js";
-import path from "path";
+import { connectWithRetry, disconnectDB } from "../../shared/utils/dbConnection.js";
 
-dotenv.config({ path: path.resolve(process.cwd(), "../.env") });
-
-const mongoUri = process.env.MONGO_URI;
-
-// Connect to MongoDB
 export const connectDB = async () => {
-    try {
-        if (!mongoUri) throw new Error("MONGO_URI not found in .env");
-        await mongoose.connect(mongoUri);
-        logger.info("MongoDB connected successfully");
-    } catch (err) {
-        logger.error(`MongoDB connection error: ${err.message}`);
-        process.exit(1);
+    const mongoUri = process.env.MONGO_URI;
+
+    if (!mongoUri) {
+        throw new Error("MONGO_URI not found in environment variables");
     }
+
+    const serviceName = process.env.SERVICE_NAME || "users-service";
+    return await connectWithRetry(mongoUri, serviceName);
 };
 
-// Disconnect MongoDB
-export const disconnectDB = async () => {
-    try {
-        await mongoose.disconnect();
-        logger.info("MongoDB disconnected");
-    } catch (err) {
-        logger.error(`Error disconnecting DB: ${err.message}`);
-    }
-};
+export { disconnectDB };

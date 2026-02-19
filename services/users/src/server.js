@@ -1,162 +1,192 @@
-// services/users/src/server.js
-import express from "express";
-import dotenv from "dotenv";
-import cors from "cors";
-import path from "path";
-import { fileURLToPath } from "url";
-import cookieParser from "cookie-parser";
-import { connectDB, swaggerServe, swaggerSetup } from "./config/index.js";
-import userRoutes from "./routes/userRoutes.js";
-import { errorHandler } from "./middlewares/errorMiddleware.js";
-import { requestIdMiddleware } from "../shared/middlewares/requestId.js";
-import {
-    requestLogger,
-    performanceMonitor,
-    extractClientIP
-} from "./middlewares/requestLogger.js";
-import { getCorsOptions } from "../shared/config/cors.js";
-import { validateServiceKeys } from "../shared/config/serviceKeys.js";
+// services/users/src/services/userService.js
+import bcrypt from "bcrypt";
+import { JWTManager } from "../config/jwt.js";
+import { sendEmail } from "../utils/mail.js";
+import User, { USER_STATUS } from "../models/userModel.js";
+import Session from "../models/sessionModel.js";
 
-import ConsulClient from "../shared/utils/consulClient.js";
-import RabbitMQClient from "../shared/utils/rabbitmqClient.js";
-import { EXCHANGES } from "../shared/events/eventTypes.js";
-import mongoose from "mongoose";
+const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
+const MAX_LOGIN_ATTEMPTS = parseInt(process.env.MAX_LOGIN_ATTEMPTS || "5", 10);
+const LOCKOUT_DURATION = parseInt(process.env.LOCKOUT_DURATION || "30", 10);
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const userService = {
 
-// Load .env
-const envPath = path.resolve(__dirname, "../.env");
-const result = dotenv.config({ path: envPath });
-
-if (result.error) {
-    console.error("WARNING: Could not load .env file from:", envPath);
-    console.error("   Error:", result.error.message);
-    console.error("   Falling back to process environment variables");
-}
-
-// Validate critical variables
-const requiredVars = ['MONGO_URI', 'JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET'];
-const missing = requiredVars.filter(v => !process.env[v]);
-
-if (missing.length > 0) {
-    console.error("ERROR: Missing required environment variables:", missing.join(', '));
-    process.exit(1);
-}
-
-// Validate service keys
-try {
-    validateServiceKeys();
-} catch (error) {
-    console.error('Service key validation failed:', error.message);
-    if (process.env.NODE_ENV === 'production') {
-        process.exit(1);
-    }
-}
-
-// Create Express app
-const app = express();
-
-// CORS Configuration (using shared)
-app.use(cors(getCorsOptions()));
-
-// Middleware stack
-app.use(requestIdMiddleware);
-app.use(extractClientIP);
-app.use(requestLogger);
-app.use(performanceMonitor);
-app.use(express.json());
-app.use(cookieParser());
-
-// Swagger documentation
-app.use("/api-docs", swaggerServe, swaggerSetup);
-
-// API Routes (with versioning)
-app.use("/api/v1/users", userRoutes);
-
-// Root health check
-app.get("/", (req, res) => {
-    res.json({
-        service: "users-service",
-        status: "running",
-        port: process.env.PORT || 5001,
-        timestamp: new Date().toISOString(),
-    });
-});
-
-// Error Handler
-app.use(errorHandler);
-
-// RabbitMQ Setup
-const rabbitMQ = new RabbitMQClient();
-async function setupRabbitMQ() {
-    try {
-        await rabbitMQ.connect();
-        await rabbitMQ.createExchange(EXCHANGES.USERS, "topic");
-        console.log("RabbitMQ connected");
-    } catch (error) {
-        console.error("RabbitMQ failed:", error.message);
-    }
-}
-
-// Start Server
-const PORT = process.env.PORT || 5001;
-let server;
-
-connectDB()
-    .then(async () => {
-        server = app.listen(PORT, async () => {
-            console.log(`Users Service running on http://localhost:${PORT}`);
-            console.log(`API Documentation: http://localhost:${PORT}/api-docs`);
-            console.log(`Health Check: http://localhost:${PORT}/api/v1/users/health`);
-
-            // Setup RabbitMQ
-            await setupRabbitMQ();
-
-            // Register with Consul
-            const SERVICE_NAME = process.env.SERVICE_NAME || "users-service";
-            const consulClient = new ConsulClient(
-                SERVICE_NAME,
-                PORT,
-                `/api/v1/${SERVICE_NAME.split("-")[0]}/health`
-            );
-            await consulClient.register();
+    // ── Create new user ──────────────────────────────────────────────
+    async createUser({ username, email, password, role = "manager" }) {
+        const user = await User.create({
+            username,
+            email,
+            password,
+            role,
+            emailVerified: false,
         });
-    })
-    .catch((err) => {
-        console.error("Failed to connect to MongoDB:", err);
-        process.exit(1);
-    });
 
-// Graceful shutdown handler
-const gracefulShutdown = async (signal) => {
-    console.log(`\n${signal} received. Starting graceful shutdown...`);
-
-    if (server) {
-        server.close(() => {
-            console.log('HTTP server closed');
+        const { token: verificationToken } = JWTManager.generateEmailToken({
+            userId: user._id,
+            email: user.email,
         });
-    }
 
-    try {
-        // Close database
-        await mongoose.connection.close();
-        console.log('MongoDB connection closed');
+        return { userId: user._id, verificationToken };
+    },
 
-        // Close RabbitMQ if used
-        if (rabbitMQ && rabbitMQ.isConnected) {
-            await rabbitMQ.close();
-            console.log('RabbitMQ connection closed');
+    // ── Email verification ───────────────────────────────────────────
+    async sendVerificationEmail(email, username, token) {
+        const verifyLink = `${FRONTEND_URL}/verify-email?token=${token}`;
+        await sendEmail({
+            to: email,
+            subject: "Verify your Stock Management account",
+            html: `<p>Hello ${username},</p>
+                   <p>Please verify your email by clicking the link below:</p>
+                   <a href="${verifyLink}" target="_blank">${verifyLink}</a>
+                   <p>This link expires in 24 hours.</p>`,
+        });
+    },
+
+    async verifyEmailToken(token) {
+        const { valid, decoded } = JWTManager.verifyEmailToken(token);
+        if (!valid) throw new Error("Invalid or expired verification token");
+
+        const user = await User.findById(decoded.userId);
+        if (!user) throw new Error("User not found");
+
+        user.emailVerified = true;
+        user.status = USER_STATUS.ACTIVE;
+        await user.save();
+
+        return { email: user.email };
+    },
+
+    async resendVerificationEmail(email) {
+        const user = await User.findOne({ email });
+        if (!user) throw new Error("User not found");
+        if (user.emailVerified) throw new Error("Email already verified");
+
+        const { token } = JWTManager.generateEmailToken({ userId: user._id, email: user.email });
+        await this.sendVerificationEmail(email, user.username, token);
+    },
+
+    // ── Login helpers ────────────────────────────────────────────────
+    async findUserByEmail(email) {
+        return User.findOne({ email }).select("+password");
+    },
+
+    async validatePassword(password, hashed) {
+        return bcrypt.compare(password, hashed);
+    },
+
+    isAccountLocked(user) {
+        const lockUntil = user.lockUntil;
+        if (lockUntil && lockUntil > Date.now()) {
+            const minutesRemaining = Math.ceil((lockUntil - Date.now()) / 60000);
+            return { locked: true, minutesRemaining };
+        }
+        return { locked: false };
+    },
+
+    async handleFailedLogin(userId, attempts = 0) {
+        const newAttempts = attempts + 1;
+        const update = { loginAttempts: newAttempts };
+
+        if (newAttempts >= MAX_LOGIN_ATTEMPTS) {
+            update.lockUntil = new Date(Date.now() + LOCKOUT_DURATION * 60000);
         }
 
-        process.exit(0);
-    } catch (error) {
-        console.error('Error during shutdown:', error);
-        process.exit(1);
-    }
+        await User.findByIdAndUpdate(userId, update);
+    },
+
+    async resetFailedLoginAttempts(userId) {
+        await User.findByIdAndUpdate(userId, { loginAttempts: 0, lockUntil: null });
+    },
+
+    // ── Tokens & sessions ────────────────────────────────────────────
+    // ✅ FIXED: now properly stores ipAddress and userAgent in session
+    async generateAndStoreTokens(user, { ipAddress, userAgent } = {}) {
+        const { token: accessToken } = JWTManager.generateAccessToken({
+            userId: user._id,
+            role: user.role,
+        });
+        const { token: refreshToken } = JWTManager.generateRefreshToken({
+            userId: user._id,
+        });
+
+        await Session.createSession({
+            userId: user._id,
+            accessToken,
+            refreshToken,
+            ipAddress: ipAddress || null,   // ✅ was missing
+            userAgent: userAgent || null,    // ✅ was missing
+        });
+
+        return { accessToken, refreshToken };
+    },
+
+    async validateRefreshToken(refreshToken) {
+        return JWTManager.verifyRefreshToken(refreshToken);
+    },
+
+    setAuthCookies(res, accessToken, refreshToken) {
+        res.cookie("accessToken", accessToken, {
+            httpOnly: true,
+            sameSite: "strict",
+            secure: process.env.NODE_ENV === "production",
+            maxAge: 15 * 60 * 1000, // 15 minutes
+        });
+        res.cookie("refreshToken", refreshToken, {
+            httpOnly: true,
+            sameSite: "strict",
+            secure: process.env.NODE_ENV === "production",
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        });
+    },
+
+    clearAuthCookies(res) {
+        res.clearCookie("accessToken");
+        res.clearCookie("refreshToken");
+    },
+
+    // ── Password reset ───────────────────────────────────────────────
+    async createPasswordResetToken(userId) {
+        const { token } = JWTManager.generatePasswordResetToken({ userId });
+        const user = await User.findById(userId);
+        user.passwordResetToken = token;
+        user.passwordResetExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+        await user.save();
+        return token;
+    },
+
+    async sendPasswordResetEmail(email, username, token) {
+        const resetLink = `${FRONTEND_URL}/reset-password/${token}`;
+        await sendEmail({
+            to: email,
+            subject: "Reset your password",
+            html: `<p>Hi ${username},</p>
+                   <p>Click below to reset your password:</p>
+                   <a href="${resetLink}" target="_blank">${resetLink}</a>
+                   <p>This link expires in 1 hour.</p>`,
+        });
+    },
+
+    async validatePasswordResetToken(token) {
+        const { valid, decoded } = JWTManager.verifyPasswordResetToken(token);
+        if (!valid) throw new Error("Invalid or expired reset token");
+
+        const user = await User.findById(decoded.userId);
+        if (!user || user.passwordResetExpires < Date.now()) {
+            throw new Error("Reset token expired");
+        }
+
+        return { userId: user._id };
+    },
+
+    async updatePassword(userId, newPassword) {
+        const user = await User.findById(userId).select('+password');
+        if (!user) throw new Error('User not found');
+
+        user.password = newPassword;
+        user.passwordResetToken = undefined;
+        user.passwordResetExpires = undefined;
+        await user.save();
+    },
 };
 
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-
-export { rabbitMQ };
+export default userService;

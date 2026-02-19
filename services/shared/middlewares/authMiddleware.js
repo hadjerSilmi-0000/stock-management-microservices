@@ -25,7 +25,7 @@ export const authMiddleware = async (req, res, next) => {
 
         const response = await usersBreaker.execute({
             method: 'GET',
-            url: `${USERS_SERVICE_URL}/api/users/verify-token`,
+            url: `${USERS_SERVICE_URL}/api/v1/users/verify-token`,
             headers: { Cookie: `accessToken=${token}` }
         });
 
@@ -39,7 +39,6 @@ export const authMiddleware = async (req, res, next) => {
         req.user = response.user;
         next();
     } catch (error) {
-        // Handle circuit breaker errors
         if (error.message.includes('unavailable')) {
             return res.status(503).json({
                 success: false,

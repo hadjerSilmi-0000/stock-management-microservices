@@ -8,10 +8,13 @@ import {
     refreshToken,
     logout,
     getProfile,
+    updateProfile,
+    changePassword,
     getAllUsers,
     getUserById,
     updateUser,
-    deleteUser
+    deleteUser,
+    getCurrentUser,
 } from "../controllers/userController.js";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { roleMiddleware } from "../middlewares/roleMiddleware.js";
@@ -22,22 +25,22 @@ import {
     loginSchema,
     forgotPasswordSchema,
     resetPasswordSchema,
-    updateUserSchema
+    updateUserSchema,
 } from "../validations/userValidation.js";
 
 const router = express.Router();
 
-// ==================== MICROSERVICE HEALTH CHECK ====================
+// ==================== HEALTH CHECK ====================
 router.get("/health", (req, res) => {
     res.json({
         status: "UP",
         service: "users-service",
         timestamp: new Date().toISOString(),
-        port: process.env.PORT || 5001
+        port: process.env.PORT || 5001,
     });
 });
 
-// ==================== PUBLIC ROUTES (with validation) ====================
+// ==================== PUBLIC ROUTES ====================
 router.post("/register",
     loginLimiter,
     validateRequest(registerSchema),
@@ -65,6 +68,7 @@ router.post("/reset-password",
 router.post("/refresh-token", refreshToken);
 
 // ==================== TOKEN VERIFICATION (for other microservices) ====================
+// NOTE: Must be defined BEFORE /:id to avoid route conflict
 router.get("/verify-token", authMiddleware, (req, res) => {
     res.json({
         success: true,
@@ -75,16 +79,37 @@ router.get("/verify-token", authMiddleware, (req, res) => {
             email: req.user.email,
             role: req.user.role,
             status: req.user.status,
-            emailVerified: req.user.emailVerified
-        }
+            emailVerified: req.user.emailVerified,
+        },
     });
 });
 
 // ==================== PROTECTED ROUTES - ALL AUTHENTICATED USERS ====================
 router.post("/logout", authMiddleware, logout);
 router.get("/profile", authMiddleware, getProfile);
+router.put("/profile", authMiddleware, updateProfile);          // was missing
+router.put("/change-password", authMiddleware, changePassword); // was missing
+router.get("/me", authMiddleware, getCurrentUser);
 
-// ==================== ADMIN ONLY ROUTES - USER MANAGEMENT ====================
+// ==================== ADMIN DASHBOARD ====================
+// NOTE: Must be defined BEFORE /:id to avoid "dashboard" being treated as an ID
+router.get("/admin/dashboard",
+    authMiddleware,
+    roleMiddleware("admin"),
+    (req, res) => {
+        res.json({
+            success: true,
+            message: "Welcome to Admin Dashboard!",
+            user: {
+                id: req.user._id,
+                username: req.user.username,
+                role: req.user.role,
+            },
+        });
+    }
+);
+
+// ==================== ADMIN ONLY - USER MANAGEMENT ====================
 router.get("/",
     authMiddleware,
     roleMiddleware("admin"),
@@ -108,23 +133,6 @@ router.delete("/:id",
     authMiddleware,
     roleMiddleware("admin"),
     deleteUser
-);
-
-// ==================== ADMIN DASHBOARD (example endpoint) ====================
-router.get("/admin/dashboard",
-    authMiddleware,
-    roleMiddleware("admin"),
-    (req, res) => {
-        res.json({
-            success: true,
-            message: "Welcome to Admin Dashboard!",
-            user: {
-                id: req.user._id,
-                username: req.user.username,
-                role: req.user.role
-            }
-        });
-    }
 );
 
 export default router;

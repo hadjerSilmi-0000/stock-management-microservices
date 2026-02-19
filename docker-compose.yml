@@ -1,1 +1,187 @@
-cd
+version: "3.9"
+
+services:
+
+  # ── Infrastructure ────────────────────────────────────────────────
+
+  mongo-users:
+    image: mongo:7
+    container_name: mongo-users
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_users_data:/data/db
+    networks:
+      - stock-net
+
+  mongo-products:
+    image: mongo:7
+    container_name: mongo-products
+    restart: unless-stopped
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongo_products_data:/data/db
+    networks:
+      - stock-net
+
+  mongo-stock:
+    image: mongo:7
+    container_name: mongo-stock
+    restart: unless-stopped
+    ports:
+      - "27019:27017"
+    volumes:
+      - mongo_stock_data:/data/db
+    networks:
+      - stock-net
+
+  mongo-suppliers:
+    image: mongo:7
+    container_name: mongo-suppliers
+    restart: unless-stopped
+    ports:
+      - "27020:27017"
+    volumes:
+      - mongo_suppliers_data:/data/db
+    networks:
+      - stock-net
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"    # AMQP
+      - "15672:15672"  # Management UI (admin/admin)
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin
+    networks:
+      - stock-net
+
+  consul:
+    image: hashicorp/consul:1.17
+    container_name: consul
+    restart: unless-stopped
+    ports:
+      - "8500:8500"  # UI available at http://localhost:8500
+    command: agent -server -bootstrap-expect=1 -ui -client=0.0.0.0
+    networks:
+      - stock-net
+
+  # ── Microservices ─────────────────────────────────────────────────
+
+  users-service:
+    build:
+      context: ./services/users
+      dockerfile: Dockerfile
+    container_name: users-service
+    restart: unless-stopped
+    ports:
+      - "5001:5001"
+    env_file:
+      - ./services/users/.env
+    environment:
+      - MONGO_URI=mongodb://mongo-users:27017/users_db
+      - RABBITMQ_URL=amqp://admin:admin@rabbitmq:5672
+      - CONSUL_HOST=consul
+      - SERVICE_NAME=users-service
+      - PORT=5001
+    depends_on:
+      - mongo-users
+      - rabbitmq
+      - consul
+    networks:
+      - stock-net
+
+  products-service:
+    build:
+      context: ./services/products
+      dockerfile: Dockerfile
+    container_name: products-service
+    restart: unless-stopped
+    ports:
+      - "5002:5002"
+    env_file:
+      - ./services/products/.env
+    environment:
+      - MONGO_URI=mongodb://mongo-products:27017/products_db
+      - RABBITMQ_URL=amqp://admin:admin@rabbitmq:5672
+      - CONSUL_HOST=consul
+      - USERS_SERVICE_URL=http://users-service:5001
+      - SUPPLIERS_SERVICE_URL=http://suppliers-service:5004
+      - SERVICE_NAME=products-service
+      - PORT=5002
+    depends_on:
+      - mongo-products
+      - rabbitmq
+      - consul
+      - users-service
+    networks:
+      - stock-net
+
+  stock-service:
+    build:
+      context: ./services/stock
+      dockerfile: Dockerfile
+    container_name: stock-service
+    restart: unless-stopped
+    ports:
+      - "5003:5003"
+    env_file:
+      - ./services/stock/.env
+    environment:
+      - MONGO_URI=mongodb://mongo-stock:27017/stock_db
+      - RABBITMQ_URL=amqp://admin:admin@rabbitmq:5672
+      - CONSUL_HOST=consul
+      - USERS_SERVICE_URL=http://users-service:5001
+      - PRODUCTS_SERVICE_URL=http://products-service:5002
+      - SERVICE_NAME=stock-service
+      - PORT=5003
+    depends_on:
+      - mongo-stock
+      - rabbitmq
+      - consul
+      - users-service
+      - products-service
+    networks:
+      - stock-net
+
+  suppliers-service:
+    build:
+      context: ./services/suppliers
+      dockerfile: Dockerfile
+    container_name: suppliers-service
+    restart: unless-stopped
+    ports:
+      - "5004:5004"
+    env_file:
+      - ./services/suppliers/.env
+    environment:
+      - MONGO_URI=mongodb://mongo-suppliers:27017/suppliers_db
+      - RABBITMQ_URL=amqp://admin:admin@rabbitmq:5672
+      - CONSUL_HOST=consul
+      - USERS_SERVICE_URL=http://users-service:5001
+      - SERVICE_NAME=suppliers-service
+      - PORT=5004
+    depends_on:
+      - mongo-suppliers
+      - rabbitmq
+      - consul
+      - users-service
+    networks:
+      - stock-net
+
+# ── Volumes & Networks ─────────────────────────────────────────────
+
+volumes:
+  mongo_users_data:
+  mongo_products_data:
+  mongo_stock_data:
+  mongo_suppliers_data:
+
+networks:
+  stock-net:
+    driver: bridge

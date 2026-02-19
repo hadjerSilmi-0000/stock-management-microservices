@@ -12,7 +12,7 @@ import {
     getLowStockAlerts,
     getStockSummary,
 } from "../controllers/stockController.js";
-import { authMiddleware } from "../middlewares/authMiddleware.js";
+import { authMiddleware } from "../../shared/middlewares/authMiddleware.js"; // ✅ switched to shared
 import { roleMiddleware } from "../middlewares/roleMiddleware.js";
 import { validateRequest } from "../middlewares/validationMiddleware.js";
 import { stockEntrySchema, stockExitSchema } from "../validations/stockValidation.js";
@@ -22,7 +22,6 @@ const router = express.Router();
 
 // ─── Health ───────────────────────────────────────────────────────────────────
 
-// Basic service health (public — used by Consul / Traefik)
 router.get("/health", (req, res) => {
     res.json({
         status: "UP",
@@ -32,15 +31,12 @@ router.get("/health", (req, res) => {
     });
 });
 
-// Circuit breaker health (admin only)
 router.get(
     "/health/circuit-breakers",
     authMiddleware,
     roleMiddleware("admin"),
     (req, res) => {
         const stats = getAllCircuitBreakerStats();
-
-        // Determine overall status
         const anyOpen = Object.values(stats).some((s) => s.state === "OPEN");
         const anyHalf = Object.values(stats).some((s) => s.state === "HALF_OPEN");
 

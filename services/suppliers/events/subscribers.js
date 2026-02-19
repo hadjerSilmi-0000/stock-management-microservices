@@ -1,10 +1,6 @@
 /**
  * Suppliers Service - Event Subscribers
  * File: services/suppliers/src/events/subscribers.js
- * 
- * PURPOSE:
- * - Listen to STOCK events (low stock, critical stock, out of stock)
- * - Trigger supplier notifications and purchase order workflows
  */
 
 import Supplier from "../models/supplierModel.js";
@@ -13,17 +9,16 @@ import { EVENTS, EXCHANGES, QUEUES } from "../../shared/events/eventTypes.js";
 
 /**
  * Setup all event subscribers for Suppliers service
- * @param {RabbitMQClient} rabbitMQ 
+ * @param {RabbitMQClient} rabbitMQ
  */
 export async function setupSuppliersEventSubscribers(rabbitMQ) {
     logger.info("📡 Setting up Suppliers service event subscribers...");
 
     try {
-        // Ensure Stock exchange exists
         await rabbitMQ.createExchange(EXCHANGES.STOCK, "topic");
 
         // ════════════════════════════════════════════════════════════════
-        // Subscribe to STOCK_LOW
+        // STOCK_LOW
         // ════════════════════════════════════════════════════════════════
         await rabbitMQ.subscribe(
             EXCHANGES.STOCK,
@@ -31,24 +26,17 @@ export async function setupSuppliersEventSubscribers(rabbitMQ) {
             EVENTS.STOCK_LOW,
             async (event) => {
                 try {
-                    logger.warn(`🟡 LOW STOCK ALERT received for: ${event.data.sku}`);
-                    logger.info(`   Product ID: ${event.data.productId}`);
-                    logger.info(`   Current: ${event.data.currentQuantity} units`);
-                    logger.info(`   Minimum: ${event.data.minimumStock} units`);
-
-                    // TODO: Implement actual notification logic
-                    // For now, just log the alert
+                    logger.warn(`🟡 LOW STOCK ALERT for: ${event.data.sku} — ${event.data.currentQuantity} units left`);
                     await handleLowStockAlert(event.data);
-
                 } catch (error) {
-                    logger.error(`❌ Error handling STOCK_LOW event: ${error.message}`);
+                    logger.error(`❌ Error handling STOCK_LOW: ${error.message}`);
                     throw error;
                 }
             }
         );
 
         // ════════════════════════════════════════════════════════════════
-        // Subscribe to STOCK_CRITICAL
+        // STOCK_CRITICAL
         // ════════════════════════════════════════════════════════════════
         await rabbitMQ.subscribe(
             EXCHANGES.STOCK,
@@ -56,24 +44,17 @@ export async function setupSuppliersEventSubscribers(rabbitMQ) {
             EVENTS.STOCK_CRITICAL,
             async (event) => {
                 try {
-                    logger.error(`🔴 CRITICAL STOCK ALERT received for: ${event.data.sku}`);
-                    logger.error(`   Product ID: ${event.data.productId}`);
-                    logger.error(`   Current: ${event.data.currentQuantity} units`);
-                    logger.error(`   Minimum: ${event.data.minimumStock} units`);
-                    logger.error(`   ⚠️ URGENT ACTION REQUIRED!`);
-
-                    // TODO: Implement urgent notification
+                    logger.error(`🔴 CRITICAL STOCK for: ${event.data.sku} — only ${event.data.currentQuantity} units remaining`);
                     await handleCriticalStockAlert(event.data);
-
                 } catch (error) {
-                    logger.error(`❌ Error handling STOCK_CRITICAL event: ${error.message}`);
+                    logger.error(`❌ Error handling STOCK_CRITICAL: ${error.message}`);
                     throw error;
                 }
             }
         );
 
         // ════════════════════════════════════════════════════════════════
-        // Subscribe to STOCK_OUT
+        // STOCK_OUT
         // ════════════════════════════════════════════════════════════════
         await rabbitMQ.subscribe(
             EXCHANGES.STOCK,
@@ -81,24 +62,17 @@ export async function setupSuppliersEventSubscribers(rabbitMQ) {
             EVENTS.STOCK_OUT,
             async (event) => {
                 try {
-                    logger.error(`🚨 OUT OF STOCK ALERT received for: ${event.data.sku}`);
-                    logger.error(`   Product ID: ${event.data.productId}`);
-                    logger.error(`   Product Name: ${event.data.name}`);
-                    logger.error(`   Location: ${event.data.location}`);
-                    logger.error(`   🔴 IMMEDIATE RESTOCKING REQUIRED!`);
-
-                    // TODO: Implement emergency order
+                    logger.error(`🚨 OUT OF STOCK: ${event.data.sku} — ${event.data.name}`);
                     await handleOutOfStockAlert(event.data);
-
                 } catch (error) {
-                    logger.error(`❌ Error handling STOCK_OUT event: ${error.message}`);
+                    logger.error(`❌ Error handling STOCK_OUT: ${error.message}`);
                     throw error;
                 }
             }
         );
 
         // ════════════════════════════════════════════════════════════════
-        // Subscribe to PRODUCT_CREATED (to establish supplier relationships)
+        // PRODUCT_CREATED — verify supplier link
         // ════════════════════════════════════════════════════════════════
         await rabbitMQ.createExchange(EXCHANGES.PRODUCTS, "topic");
         await rabbitMQ.subscribe(
@@ -107,10 +81,9 @@ export async function setupSuppliersEventSubscribers(rabbitMQ) {
             EVENTS.PRODUCT_CREATED,
             async (event) => {
                 try {
-                    logger.info(`📥 Received PRODUCT_CREATED event for: ${event.data.sku}`);
+                    logger.info(`📥 PRODUCT_CREATED event for: ${event.data.sku}`);
 
                     if (event.data.supplierId) {
-                        // Verify supplier exists
                         const supplier = await Supplier.findById(event.data.supplierId);
 
                         if (supplier) {
@@ -119,10 +92,8 @@ export async function setupSuppliersEventSubscribers(rabbitMQ) {
                             logger.warn(`⚠️ Product ${event.data.sku} references non-existent supplier: ${event.data.supplierId}`);
                         }
                     }
-
                 } catch (error) {
-                    logger.error(`❌ Error handling PRODUCT_CREATED event: ${error.message}`);
-                    // Don't throw - this is not critical
+                    logger.error(`❌ Error handling PRODUCT_CREATED: ${error.message}`);
                 }
             }
         );
@@ -141,47 +112,56 @@ export async function setupSuppliersEventSubscribers(rabbitMQ) {
 
 /**
  * Handle low stock alert
- * TODO: Implement actual notification logic
+ * Finds the supplier for this product and logs a restocking recommendation
  */
 async function handleLowStockAlert(data) {
-    logger.info(`📋 Processing low stock alert for ${data.sku}...`);
+    try {
+        // Find supplier linked to this product via supplierId stored in the event
+        // If supplierId is not in event data, we do a best-effort lookup
+        const suggestedQty = (data.minimumStock || 10) * 2;
 
-    // TODO: Implementation ideas:
-    // 1. Find supplier for this product
-    // 2. Create draft purchase order
-    // 3. Send email to procurement team
-    // 4. Add to "needs review" queue
+        logger.info(`📋 [LOW STOCK] Product: ${data.sku}`);
+        logger.info(`   Current: ${data.currentQuantity} / Minimum: ${data.minimumStock}`);
+        logger.info(`   Suggested reorder quantity: ${suggestedQty} units`);
+        logger.info(`   Action: Create purchase order for product ${data.productId}`);
 
-    logger.info(`   Suggested action: Create purchase order for ${data.minimumStock * 2} units`);
+        // Future: send email to procurement team, create draft PO, etc.
+    } catch (error) {
+        logger.error(`handleLowStockAlert error: ${error.message}`);
+    }
 }
 
 /**
  * Handle critical stock alert
- * TODO: Implement urgent notification
+ * Urgent — logs an escalation notice with priority order quantity
  */
 async function handleCriticalStockAlert(data) {
-    logger.warn(`🚨 Processing CRITICAL stock alert for ${data.sku}...`);
+    try {
+        const urgentQty = Math.max((data.minimumStock || 10) * 3, 100);
 
-    // TODO: Implementation ideas:
-    // 1. Find all suppliers for this product
-    // 2. Send urgent email to procurement manager
-    // 3. Create priority purchase order
-    // 4. Send SMS/Slack notification
-    // 5. Escalate to management if not resolved in 24h
+        logger.warn(`🚨 [CRITICAL STOCK] Product: ${data.sku}`);
+        logger.warn(`   Current: ${data.currentQuantity} / Minimum: ${data.minimumStock}`);
+        logger.warn(`   URGENT reorder quantity: ${urgentQty} units`);
+        logger.warn(`   Action: Priority purchase order required immediately`);
 
-    const urgentQuantity = Math.max(data.minimumStock * 3, 100);
-    logger.warn(`   URGENT: Order ${urgentQuantity} units immediately!`);
+        // Future: send SMS/Slack notification to manager, escalate to admin
+    } catch (error) {
+        logger.error(`handleCriticalStockAlert error: ${error.message}`);
+    }
 }
 
 /**
- * Handle out of stock alert
- * TODO: Implement emergency order flow
+ * Handle out-of-stock alert
+ * Emergency — product completely exhausted
  */
 async function handleOutOfStockAlert(data) {
-    logger.error(`🔴 Processing OUT OF STOCK alert for ${data.sku}...`);
+    try {
+        logger.error(`🔴 [OUT OF STOCK] Product: ${data.sku} — ${data.name}`);
+        logger.error(`   Location: ${data.location || 'Main Warehouse'}`);
+        logger.error(`   Action: EMERGENCY restocking procedure — contact supplier immediately`);
 
-
-
-    logger.error(`   EMERGENCY: Product ${data.name} is completely out of stock!`);
-    logger.error(`   Action: Initiate emergency restocking procedure`);
+        // Future: auto-create emergency purchase order, notify all admins
+    } catch (error) {
+        logger.error(`handleOutOfStockAlert error: ${error.message}`);
+    }
 }

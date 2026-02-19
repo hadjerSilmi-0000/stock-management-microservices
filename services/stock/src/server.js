@@ -17,6 +17,7 @@ import {
 } from "./middlewares/requestLogger.js";
 import { getCorsOptions } from "../shared/config/cors.js";
 import { validateServiceKeys } from "../shared/config/serviceKeys.js";
+import { setupStockEventSubscribers } from "./events/subscribers.js"; // ✅ ADDED
 
 import ConsulClient from "../shared/utils/consulClient.js";
 import RabbitMQClient from "../shared/utils/rabbitmqClient.js";
@@ -52,13 +53,9 @@ try {
     }
 }
 
-// Express app
 const app = express();
 
-// CORS Configuration (using shared)
 app.use(cors(getCorsOptions()));
-
-// Middleware stack
 app.use(requestIdMiddleware);
 app.use(extractClientIP);
 app.use(requestLogger);
@@ -66,13 +63,9 @@ app.use(performanceMonitor);
 app.use(express.json());
 app.use(cookieParser());
 
-// Swagger Documentation
 app.use("/api-docs", swaggerServe, swaggerSetup);
-
-// API Routes (with versioning)
 app.use("/api/v1/stock", stockRoutes);
 
-// Root Health Check
 app.get("/", (req, res) => {
     res.json({
         service: "stock-service",
@@ -82,22 +75,25 @@ app.get("/", (req, res) => {
     });
 });
 
-// Error Handler
 app.use(errorHandler);
 
 // RabbitMQ Setup
 const rabbitMQ = new RabbitMQClient();
+
 async function setupRabbitMQ() {
     try {
         await rabbitMQ.connect();
         await rabbitMQ.createExchange(EXCHANGES.STOCK, "topic");
-        console.log("RabbitMQ connected");
+
+        // ✅ ADDED: wire up event subscribers
+        await setupStockEventSubscribers(rabbitMQ);
+
+        console.log("✅ RabbitMQ connected and subscribers registered");
     } catch (error) {
         console.error("RabbitMQ failed:", error.message);
     }
 }
 
-// Start Server
 const PORT = process.env.PORT || 5003;
 let server;
 
@@ -108,10 +104,8 @@ connectDB()
             console.log(`API Documentation: http://localhost:${PORT}/api-docs`);
             console.log(`Health Check: http://localhost:${PORT}/api/v1/stock/health`);
 
-            // Setup RabbitMQ
             await setupRabbitMQ();
 
-            // Register with Consul
             const SERVICE_NAME = process.env.SERVICE_NAME || "stock-service";
             const consulClient = new ConsulClient(
                 SERVICE_NAME,
@@ -126,22 +120,17 @@ connectDB()
         process.exit(1);
     });
 
-// Graceful shutdown handler
 const gracefulShutdown = async (signal) => {
     console.log(`\n${signal} received. Starting graceful shutdown...`);
 
     if (server) {
-        server.close(() => {
-            console.log('HTTP server closed');
-        });
+        server.close(() => console.log('HTTP server closed'));
     }
 
     try {
-        // Close database
         await mongoose.connection.close();
         console.log('MongoDB connection closed');
 
-        // Close RabbitMQ if used
         if (rabbitMQ && rabbitMQ.isConnected) {
             await rabbitMQ.close();
             console.log('RabbitMQ connection closed');
