@@ -13,6 +13,4 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
-# Frontend (commit separately)
-frontend/
-client/
+
