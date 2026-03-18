@@ -1,4 +1,4 @@
-import { connectWithRetry, disconnectDB } from "../../shared/utils/dbConnection.js";
+import { connectWithRetry, disconnectDB } from "../../../shared/utils/dbConnection.js";
 
 export const connectDB = async () => {
     const mongoUri = process.env.MONGO_URI;

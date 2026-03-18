@@ -1,4 +1,3 @@
-// services/suppliers/src/server.js
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
@@ -9,19 +8,19 @@ import { connectDB } from "./config/db.js";
 import { swaggerServe, swaggerSetup } from "./config/swagger.js";
 import supplierRoutes from "./routes/supplierRoutes.js";
 import { errorHandler } from "./middlewares/errorMiddleware.js";
-import { requestIdMiddleware } from "../shared/middlewares/requestId.js";
 import {
     requestLogger,
     performanceMonitor,
     extractClientIP
 } from "./middlewares/requestLogger.js";
-import { getCorsOptions } from "../shared/config/cors.js";
-import { validateServiceKeys } from "../shared/config/serviceKeys.js";
-import { setupSuppliersEventSubscribers } from "./events/subscribers.js"; // ✅ ADDED
 
-import ConsulClient from "../shared/utils/consulClient.js";
-import RabbitMQClient from "../shared/utils/rabbitmqClient.js";
-import { EXCHANGES } from "../shared/events/eventTypes.js";
+import { requestIdMiddleware } from "../../shared/middlewares/requestId.js";
+import { getCorsOptions } from "../../shared/config/cors.js";
+import { validateServiceKeys } from "../../shared/config/serviceKeys.js";
+import ConsulClient from "../../shared/utils/consulClient.js";
+import RabbitMQClient from "../../shared/utils/rabbitmqClient.js";
+import { EXCHANGES } from "../../shared/events/eventTypes.js";
+import { setupSuppliersEventSubscribers } from "../events/subscribers.js";
 import mongoose from "mongoose";
 
 const __filename = fileURLToPath(import.meta.url);

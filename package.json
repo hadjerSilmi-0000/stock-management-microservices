@@ -1,6 +1,7 @@
 {
   "name": "stock-management-microservices",
   "version": "1.0.0",
+  "type": "module",
   "private": true,
   "workspaces": [
     "services/*"
@@ -9,7 +10,17 @@
     "dev": "docker compose up",
     "down": "docker compose down",
     "logs": "docker compose logs -f",
-    "clean": "rm -rf node_modules package-lock.json"
+    "clean": "rm -rf node_modules package-lock.json",
+    "test:users": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testPathPatterns=services/users",
+    "test:products": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testPathPatterns=services/products",
+    "test:stock": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testPathPatterns=services/stock",
+    "test:suppliers": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testPathPatterns=services/suppliers",
+    "test:all": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
+  },
+  "devDependencies": {
+    "jest": "^30.3.0",
+    "mongodb-memory-server": "^11.0.1",
+    "supertest": "^7.2.2"
   },
   "license": "ISC"
 }

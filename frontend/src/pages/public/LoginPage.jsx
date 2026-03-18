@@ -1,122 +1,116 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { useNavigate, Link } from 'react-router-dom';
-import { Mail, Lock, LogIn } from 'lucide-react';
+import { useToast } from '../../context/ToastContext';
+import Icon from '../../components/ui/Icon';
 
-export const LoginPage = () => {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
-    const { login } = useAuth();
-    const navigate = useNavigate();
+const LoginPage = () => {
+  const [email, setEmail] = useState('admin@stockflow.io');
+  const [password, setPassword] = useState('admin123');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const { login } = useAuth();
+  const { toast } = useToast();
+  const navigate = useNavigate();
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setError('');
-        setLoading(true);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError(''); setLoading(true);
+    const result = await login(email, password);
+    setLoading(false);
+    if (result.success) { toast('Welcome back!', 'success'); navigate('/dashboard'); }
+    else setError(result.message);
+  };
 
-        try {
-            const result = await login({ email, password });
+  return (
+    <div className="auth-layout">
+      {/* LEFT — FORM */}
+      <div className="auth-left">
+        <div className="auth-form-wrapper">
+          <div className="auth-logo">
+            <div className="auth-logo-icon"><Icon name="Layers" size={20} style={{ color: 'white' }} /></div>
+            <span className="auth-logo-text">StockFlow</span>
+          </div>
+          <h1 className="auth-title">Welcome back</h1>
+          <p className="auth-subtitle">Sign in to your inventory dashboard</p>
 
-            if (result.success) {
-                // Success notification
-                console.log('Login successful!');
-                navigate('/dashboard');
-            } else {
-                setError(result.message || 'Login failed. Please check your credentials.');
-            }
-        } catch (err) {
-            setError('Login failed. Please check your credentials.');
-            console.error('Login error:', err);
-        } finally {
-            setLoading(false);
-        }
-    };
+          {error && <div className="auth-error"><Icon name="AlertCircle" size={14} />{error}</div>}
 
-    return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-            <div className="w-full max-w-md">
-                <div className="bg-white rounded-2xl shadow-lg p-8 border border-gray-200">
-                    <div className="text-center mb-8">
-                        <div className="inline-flex items-center justify-center h-16 w-16 rounded-full bg-blue-600 text-white mb-4">
-                            <LogIn className="h-8 w-8" />
-                        </div>
-                        <h1 className="text-3xl font-bold text-gray-900">Welcome Back</h1>
-                        <p className="text-gray-600 mt-2">Sign in to your account</p>
-                    </div>
-
-                    {error && (
-                        <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
-                            {error}
-                        </div>
-                    )}
-
-                    <form onSubmit={handleSubmit} className="space-y-6">
-                        <div>
-                            <label htmlFor="email" className="block text-sm font-medium text-gray-900 mb-2">
-                                Email Address
-                            </label>
-                            <div className="relative">
-                                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                                <input
-                                    id="email"
-                                    type="email"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    placeholder="you@example.com"
-                                    required
-                                    className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                />
-                            </div>
-                        </div>
-
-                        <div>
-                            <label htmlFor="password" className="block text-sm font-medium text-gray-900 mb-2">
-                                Password
-                            </label>
-                            <div className="relative">
-                                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                                <input
-                                    id="password"
-                                    type="password"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    placeholder="••••••••"
-                                    required
-                                    className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="flex items-center justify-between text-sm">
-                            <Link
-                                to="/forgot-password"
-                                className="text-blue-600 hover:underline font-medium"
-                            >
-                                Forgot password?
-                            </Link>
-                        </div>
-
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {loading ? 'Signing in...' : 'Sign In'}
-                        </button>
-                    </form>
-
-                    <div className="mt-6 text-center text-sm">
-                        <span className="text-gray-600">Don't have an account? </span>
-                        <Link to="/register" className="text-blue-600 hover:underline font-medium">
-                            Sign up
-                        </Link>
-                    </div>
-                </div>
+          <form onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label className="form-label">Email address</label>
+              <div style={{ position: 'relative' }}>
+                <Icon name="Mail" size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--slate-500)', pointerEvents: 'none' }} />
+                <input className="form-input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@company.com" required style={{ paddingLeft: 42 }} />
+              </div>
             </div>
+            <div className="form-group">
+              <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                Password
+                <span className="auth-link" style={{ fontSize: 12 }} onClick={() => navigate('/forgot-password')}>Forgot password?</span>
+              </label>
+              <div style={{ position: 'relative' }}>
+                <Icon name="Lock" size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--slate-500)', pointerEvents: 'none' }} />
+                <input className="form-input" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required style={{ paddingLeft: 42 }} />
+              </div>
+            </div>
+            <div style={{ height: 8 }} />
+            <button className="btn-primary" type="submit" disabled={loading}>
+              {loading
+                ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><div className="spinner" style={{ borderColor: 'rgba(255,255,255,0.2)', borderTopColor: 'white' }} /> Signing in…</span>
+                : 'Sign In'}
+            </button>
+          </form>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, margin: '24px 0', color: 'var(--slate-600)', fontSize: 13 }}>
+            <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.06)' }} />
+            Demo credentials pre-filled
+            <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.06)' }} />
+          </div>
+
+          <div style={{ background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.15)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: 'var(--slate-400)' }}>
+            <strong style={{ color: 'var(--orange-400)' }}>Admin:</strong> admin@stockflow.io / admin123<br />
+            <strong style={{ color: 'var(--orange-400)' }}>Manager:</strong> manager@stockflow.io / manager123
+          </div>
+
+          <p style={{ textAlign: 'center', marginTop: 24, fontSize: 13, color: 'var(--slate-500)' }}>
+            No account? <span className="auth-link" onClick={() => navigate('/register')}>Create one</span>
+          </p>
         </div>
-    );
+      </div>
+
+      {/* RIGHT — VISUAL */}
+      <div className="auth-right">
+        <div className="auth-right-inner">
+          <div className="floating-badge" style={{ top: '18%', left: '8%', animationDelay: '0s' }}>
+            <Icon name="TrendingUp" size={12} style={{ marginRight: 4 }} />+24% stock efficiency
+          </div>
+          <div className="floating-badge" style={{ top: '30%', right: '6%', animationDelay: '1s' }}>
+            <Icon name="Bell" size={12} style={{ marginRight: 4 }} />3 low-stock alerts
+          </div>
+          <div className="floating-badge" style={{ bottom: '28%', left: '5%', animationDelay: '0.5s' }}>
+            <Icon name="CheckCircle" size={12} style={{ marginRight: 4 }} />99.9% uptime
+          </div>
+
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 40, fontWeight: 800, color: 'white', lineHeight: 1.1, letterSpacing: '-1.5px', marginBottom: 16, textAlign: 'center', position: 'relative', zIndex: 1 }}>
+            Control your<br /><span style={{ background: 'linear-gradient(135deg,var(--orange-400),var(--amber-400))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>entire inventory</span><br />from one place
+          </h2>
+          <p style={{ color: 'var(--slate-400)', fontSize: 15, textAlign: 'center', lineHeight: 1.6, maxWidth: 320, marginBottom: 40, position: 'relative', zIndex: 1 }}>
+            Real-time tracking, automated alerts, and supplier management — powered by microservices.
+          </p>
+
+          <div className="stats-grid">
+            {[{ value: '2,840', label: 'Products tracked' }, { value: '98.2%', label: 'Order accuracy' }, { value: '↓ 34%', label: 'Stock waste' }, { value: '4.8★', label: 'Team satisfaction' }].map((s, i) => (
+              <div key={i} className="stat-card" style={{ animationDelay: `${0.3 + i * 0.1}s` }}>
+                <div className="stat-card-value">{s.value}</div>
+                <div className="stat-card-label">{s.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 export default LoginPage;

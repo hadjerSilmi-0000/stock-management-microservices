@@ -1,5 +1,3 @@
-// services/suppliers/src/routes/supplierRoutes.js
-
 import express from "express";
 import {
     createSupplier,
@@ -10,7 +8,7 @@ import {
     searchSuppliers,
     getActiveSuppliers,
 } from "../controllers/supplierController.js";
-import { authMiddleware } from "../../shared/middlewares/authMiddleware.js"; // ✅ switched to shared
+import { authMiddleware } from "../../../shared/middlewares/authMiddleware.js";
 import { roleMiddleware } from "../middlewares/roleMiddleware.js";
 import { validateRequest } from "../middlewares/validationMiddleware.js";
 import { createSupplierSchema, updateSupplierSchema } from "../validations/supplierValidation.js";

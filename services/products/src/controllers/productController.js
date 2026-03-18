@@ -12,13 +12,13 @@ import {
     BadRequestError,
     asyncHandler,
 } from "../utils/errors.js";
-import { getCircuitBreaker } from "../../shared/utils/circuitBreaker.js";
-import { rabbitMQ } from "../server.js";
-import { EVENTS, EXCHANGES, createEvent } from "../../shared/events/eventTypes.js";
+import { getCircuitBreaker } from "../../../shared/utils/circuitBreaker.js";
+import { rabbitMQ } from "../../../shared/utils/rabbitmqSingleton.js";
+import { EVENTS, EXCHANGES, createEvent } from "../../../shared/events/eventTypes.js";
+import { sendSuccess, sendError, buildPagination } from "../../../shared/utils/sendResponse.js";
 
 const SUPPLIERS_SERVICE_URL = process.env.SUPPLIERS_SERVICE_URL || "http://localhost:5004";
 
-// Circuit breaker for suppliers service
 const suppliersBreaker = getCircuitBreaker('suppliers-service', {
     timeout: 3000,
     errorThresholdPercentage: 50,
@@ -26,32 +26,30 @@ const suppliersBreaker = getCircuitBreaker('suppliers-service', {
     _isFallback: true,
     name: "Unknown Supplier",
     contactPerson: "N/A",
-    email: "N/A"
+    email: "N/A",
 }));
 
-// Helper function to get supplier info
 async function getSupplierInfo(supplierId, token) {
     try {
         const data = await suppliersBreaker.execute({
             method: 'GET',
             url: `${SUPPLIERS_SERVICE_URL}/api/v1/suppliers/${supplierId}`,
-            headers: { Cookie: `accessToken=${token}` }
+            headers: { Cookie: `accessToken=${token}` },
         });
-        return data?.supplier || null;
+        return data?.data || null;
     } catch (error) {
         logger.error(`Error fetching supplier ${supplierId}:`, error.message);
         return null;
     }
 }
 
-// Helper to safely publish events (never crash the main flow)
 async function publishEvent(exchange, eventType, data) {
     try {
         const event = createEvent(eventType, data);
         await rabbitMQ.publish(exchange, eventType, event);
-        logger.info(`✅ Event published: ${eventType}`);
+        logger.info(`Event published: ${eventType}`);
     } catch (error) {
-        logger.error(`❌ Failed to publish event ${eventType}: ${error.message}`);
+        logger.error(`Failed to publish event ${eventType}: ${error.message}`);
     }
 }
 
@@ -79,24 +77,19 @@ export const createProduct = asyncHandler(async (req, res) => {
 
     logger.info(`Product created: ${product.sku} by user ${req.user.id}`);
 
-    // ✅ ADDED: Publish PRODUCT_CREATED event so stock service creates initial stock entry
     await publishEvent(EXCHANGES.PRODUCTS, EVENTS.PRODUCT_CREATED, {
-        productId: product._id.toString(),
-        sku: product.sku,
-        name: product.name,
-        description: product.description,
-        category: product.category,
-        price: product.price,
-        supplierId: product.supplierId,
+        productId:         product._id.toString(),
+        sku:               product.sku,
+        name:              product.name,
+        description:       product.description,
+        category:          product.category,
+        price:             product.price,
+        supplierId:        product.supplierId,
         lowStockThreshold: product.lowStockThreshold,
-        createdBy: req.user.id,
+        createdBy:         req.user.id,
     });
 
-    res.status(201).json({
-        success: true,
-        message: "Product created successfully",
-        data: product,
-    });
+    return sendSuccess(res, 201, product, "Product created successfully");
 });
 
 // @desc    Get all products with pagination, filtering, and sorting
@@ -106,25 +99,21 @@ export const getAllProducts = asyncHandler(async (req, res) => {
     const { page, limit, skip } = req.pagination;
 
     const allowedFilters = ['category', 'sku', 'name', 'supplierId', 'isActive'];
-    const filter = buildFilterQuery(req.query, allowedFilters);
+    const filter         = buildFilterQuery(req.query, allowedFilters);
 
     if (req.user.role !== "admin") {
         filter.isActive = true;
     }
 
-    const sort = parseSortParams(req.query.sort);
+    const sort   = parseSortParams(req.query.sort);
     const fields = parseFieldsParams(req.query.fields);
 
     const [products, total] = await Promise.all([
-        Product.find(filter)
-            .select(fields)
-            .sort(sort)
-            .skip(skip)
-            .limit(limit),
+        Product.find(filter).select(fields).sort(sort).skip(skip).limit(limit),
         Product.countDocuments(filter),
     ]);
 
-    res.json(createPaginationResponse(products, total, page, limit));
+    return sendSuccess(res, 200, products, null, buildPagination(page, limit, total));
 });
 
 // @desc    Get single product by ID
@@ -141,24 +130,14 @@ export const getProductById = asyncHandler(async (req, res) => {
         throw new NotFoundError("Product", "PRODUCT_NOT_FOUND");
     }
 
-    res.json({
-        success: true,
-        data: product,
-    });
+    return sendSuccess(res, 200, product);
 });
 
 // @desc    Update product
 // @route   PUT /api/v1/products/:id
 // @access  Private (Admin, Manager)
 export const updateProduct = asyncHandler(async (req, res) => {
-    const allowedUpdates = [
-        "name",
-        "description",
-        "category",
-        "price",
-        "supplierId",
-        "lowStockThreshold",
-    ];
+    const allowedUpdates = ["name", "description", "category", "price", "supplierId", "lowStockThreshold"];
 
     const updates = {};
     for (let key of allowedUpdates) {
@@ -183,19 +162,14 @@ export const updateProduct = asyncHandler(async (req, res) => {
 
     logger.info(`Product updated: ${product.sku} by user ${req.user.id}`);
 
-    // ✅ ADDED: Publish PRODUCT_UPDATED event
     await publishEvent(EXCHANGES.PRODUCTS, EVENTS.PRODUCT_UPDATED, {
-        productId: product._id.toString(),
-        sku: product.sku,
-        changes: updates,
-        updatedBy: req.user.id,
+        productId:  product._id.toString(),
+        sku:        product.sku,
+        changes:    updates,
+        updatedBy:  req.user.id,
     });
 
-    res.json({
-        success: true,
-        message: "Product updated successfully",
-        data: product,
-    });
+    return sendSuccess(res, 200, product, "Product updated successfully");
 });
 
 // @desc    Delete product (soft delete)
@@ -212,17 +186,13 @@ export const deleteProduct = asyncHandler(async (req, res) => {
 
     logger.info(`Product soft-deleted: ${product.sku} by user ${req.user.id}`);
 
-    // ✅ ADDED: Publish PRODUCT_DELETED event so stock service removes stock entry
     await publishEvent(EXCHANGES.PRODUCTS, EVENTS.PRODUCT_DELETED, {
-        productId: product._id.toString(),
-        sku: product.sku,
-        deletedBy: req.user.id,
+        productId:  product._id.toString(),
+        sku:        product.sku,
+        deletedBy:  req.user.id,
     });
 
-    res.json({
-        success: true,
-        message: "Product deleted successfully",
-    });
+    return sendSuccess(res, 200, null, "Product deleted successfully");
 });
 
 // @desc    Search products
@@ -239,9 +209,9 @@ export const searchProducts = asyncHandler(async (req, res) => {
     const filter = req.user.role === "admin" ? {} : { isActive: true };
 
     filter.$or = [
-        { name: { $regex: q, $options: "i" } },
+        { name:        { $regex: q, $options: "i" } },
         { description: { $regex: q, $options: "i" } },
-        { sku: { $regex: q, $options: "i" } },
+        { sku:         { $regex: q, $options: "i" } },
     ];
 
     const [products, total] = await Promise.all([
@@ -249,5 +219,5 @@ export const searchProducts = asyncHandler(async (req, res) => {
         Product.countDocuments(filter),
     ]);
 
-    res.json(createPaginationResponse(products, total, page, limit));
+    return sendSuccess(res, 200, products, null, buildPagination(page, limit, total));
 });

@@ -12,11 +12,11 @@ import {
     getLowStockAlerts,
     getStockSummary,
 } from "../controllers/stockController.js";
-import { authMiddleware } from "../../shared/middlewares/authMiddleware.js"; // ✅ switched to shared
+import { authMiddleware } from "../../../shared/middlewares/authMiddleware.js";
+import { getAllCircuitBreakerStats } from "../../../shared/utils/circuitBreaker.js";
 import { roleMiddleware } from "../middlewares/roleMiddleware.js";
 import { validateRequest } from "../middlewares/validationMiddleware.js";
 import { stockEntrySchema, stockExitSchema } from "../validations/stockValidation.js";
-import { getAllCircuitBreakerStats } from "../../shared/utils/circuitBreaker.js";
 
 const router = express.Router();
 

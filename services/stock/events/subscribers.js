@@ -1,7 +1,6 @@
-import StockLevel from "../models/stockLevelModel.js";
-import logger from "../utils/logger.js";
+import StockLevel from "../src/models/stockLevelModel.js";
+import logger from "../src/utils/logger.js";
 import { EVENTS, EXCHANGES, QUEUES } from "../../shared/events/eventTypes.js";
-
 /**
  * Setup all event subscribers for Stock service
  * @param {RabbitMQClient} rabbitMQ

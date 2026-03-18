@@ -9,18 +9,18 @@ import { connectDB } from "./config/db.js";
 import { swaggerServe, swaggerSetup } from "./config/swagger.js";
 import productRoutes from "./routes/productRoutes.js";
 import { errorHandler } from "./middlewares/errorMiddleware.js";
-import { requestIdMiddleware } from "../shared/middlewares/requestId.js";
+import { requestIdMiddleware } from "../../shared/middlewares/requestId.js";
 import {
     requestLogger,
     performanceMonitor,
     extractClientIP
 } from "./middlewares/requestLogger.js";
-import { getCorsOptions } from "../shared/config/cors.js";
-import { validateServiceKeys } from "../shared/config/serviceKeys.js";
+import { getCorsOptions } from "../../shared/config/cors.js";
+import { validateServiceKeys } from "../../shared/config/serviceKeys.js";
 
-import ConsulClient from "../shared/utils/consulClient.js";
-import RabbitMQClient from "../shared/utils/rabbitmqClient.js";
-import { EXCHANGES } from "../shared/events/eventTypes.js";
+import ConsulClient from "../../shared/utils/consulClient.js";
+import RabbitMQClient from "../../shared/utils/rabbitmqClient.js";
+import { EXCHANGES } from "../../shared/events/eventTypes.js";
 import mongoose from "mongoose";
 
 const __filename = fileURLToPath(import.meta.url);

@@ -1,153 +1,121 @@
 import axios from 'axios';
 
-// Base API URL - Update this to your backend URL
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api/users';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api/v1/users';
 
-// Create axios instance with default config
 const api = axios.create({
-    baseURL: API_BASE_URL,
-    headers: {
-        'Content-Type': 'application/json',
-    },
-    timeout: 10000, // 10 seconds timeout
+  baseURL: API_BASE_URL,
+  headers: { 'Content-Type': 'application/json' },
+  timeout: 10000,
+  withCredentials: true,
 });
 
-// Request Interceptor - Add token to every request
-api.interceptors.request.use(
-    (config) => {
-        // Get token from localStorage
-        const token = localStorage.getItem('accessToken');
+// Request interceptor — attach token
+api.interceptors.request.use(config => {
+  const token = localStorage.getItem('accessToken');
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+}, error => Promise.reject(error));
 
-        if (token) {
-            config.headers.Authorization = `Bearer ${token}`;
-        }
-
-        console.log(`🚀 API Request: ${config.method.toUpperCase()} ${config.url}`);
-        return config;
-    },
-    (error) => {
-        console.error('❌ Request Error:', error);
-        return Promise.reject(error);
-    }
-);
-
-// Response Interceptor - Handle errors and token refresh
+// Response interceptor — handle 401 / token refresh
 api.interceptors.response.use(
-    (response) => {
-        console.log(`✅ API Response: ${response.config.url}`, response.data);
-        return response;
-    },
-    async (error) => {
-        const originalRequest = error.config;
-
-        // If error is 401 and we haven't tried to refresh token yet
-        if (error.response?.status === 401 && !originalRequest._retry) {
-            originalRequest._retry = true;
-
-            try {
-                const refreshToken = localStorage.getItem('refreshToken');
-
-                if (refreshToken) {
-                    console.log('🔄 Attempting to refresh token...');
-
-                    // Call refresh token endpoint
-                    const response = await axios.post(
-                        `${API_BASE_URL}/refresh-token`,
-                        { refreshToken }
-                    );
-
-                    const { accessToken: newAccessToken } = response.data;
-
-                    // Update stored token
-                    localStorage.setItem('accessToken', newAccessToken);
-
-                    // Retry original request with new token
-                    originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
-                    return api(originalRequest);
-                }
-            } catch (refreshError) {
-                console.error('❌ Token refresh failed:', refreshError);
-
-                // Clear tokens and redirect to login
-                localStorage.removeItem('accessToken');
-                localStorage.removeItem('refreshToken');
-                localStorage.removeItem('user');
-
-                window.location.href = '/login';
-                return Promise.reject(refreshError);
-            }
+  response => response,
+  async error => {
+    const original = error.config;
+    if (error.response?.status === 401 && !original._retry) {
+      original._retry = true;
+      try {
+        const refresh = localStorage.getItem('refreshToken');
+        if (refresh) {
+          const { data } = await axios.post(`${API_BASE_URL}/refresh-token`, { refreshToken: refresh });
+          localStorage.setItem('accessToken', data.accessToken);
+          original.headers.Authorization = `Bearer ${data.accessToken}`;
+          return api(original);
         }
-
-        // Log error details
-        console.error('❌ API Error:', {
-            status: error.response?.status,
-            message: error.response?.data?.message || error.message,
-            url: error.config?.url
-        });
-
-        return Promise.reject(error);
+      } catch {
+        localStorage.clear();
+        window.location.href = '/login';
+      }
     }
+    return Promise.reject(error);
+  }
 );
 
-// ============ AUTH API CALLS ============
-
+// ─── AUTH ─────────────────────────────────────────────────────
 export const authAPI = {
-    // Register new user
-    register: (userData) => api.post('/register', userData),
-
-    // Login user
-    login: (credentials) => api.post('/login', credentials),
-
-    // Logout user
-    logout: () => api.post('/logout'),
-
-    // Verify email
-    verifyEmail: (token) => api.get(`/verify-email/${token}`),
-
-    // Forgot password
-    forgotPassword: (email) => api.post('/forgot-password', { email }),
-
-    // Reset password
-    resetPassword: (token, newPassword) =>
-        api.post('/reset-password', { token, newPassword }),
-
-    // Refresh access token
-    refreshToken: (refreshToken) =>
-        api.post('/refresh-token', { refreshToken }),
-
-    // Get current user profile
-    getProfile: () => api.get('/profile'),
-
-    // Verify token (for other microservices)
-    verifyToken: () => api.get('/verify-token'),
+  register: data => api.post('/register', data),
+  login: credentials => api.post('/login', credentials),
+  logout: () => api.post('/logout'),
+  verifyEmail: token => api.get(`/verify-email/${token}`),
+  forgotPassword: email => api.post('/forgot-password', { email }),
+  resetPassword: (token, password) => api.post('/reset-password', { token, newPassword: password }),
+  refreshToken: refreshToken => api.post('/refresh-token', { refreshToken }),
+  getProfile: () => api.get('/profile'),
+  updateProfile: data => api.put('/profile', data),
+  changePassword: data => api.put('/change-password', data),
+  verifyToken: () => api.get('/verify-token'),
 };
 
-// ============ USER MANAGEMENT API CALLS (ADMIN ONLY) ============
-
+// ─── USERS (ADMIN) ────────────────────────────────────────────
 export const userAPI = {
-    // Get all users
-    getAllUsers: () => api.get('/'),
-
-    // Get user by ID
-    getUserById: (id) => api.get(`/${id}`),
-
-    // Update user
-    updateUser: (id, userData) => api.put(`/${id}`, userData),
-
-    // Delete user
-    deleteUser: (id) => api.delete(`/${id}`),
+  getAll: () => api.get('/'),
+  getById: id => api.get(`/${id}`),
+  update: (id, data) => api.put(`/${id}`, data),
+  delete: id => api.delete(`/${id}`),
 };
 
-// ============ ADMIN API CALLS ============
+// ─── PRODUCTS ─────────────────────────────────────────────────
+const PRODUCTS_URL = process.env.REACT_APP_PRODUCTS_URL || 'http://localhost:5002/api/v1/products';
+const productsApi = axios.create({ baseURL: PRODUCTS_URL, withCredentials: true });
+productsApi.interceptors.request.use(config => {
+  const token = localStorage.getItem('accessToken');
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
 
-export const adminAPI = {
-    // Get admin dashboard data
-    getDashboard: () => api.get('/admin/dashboard'),
+export const productsAPI = {
+  getAll: (params) => productsApi.get('/', { params }),
+  getById: id => productsApi.get(`/${id}`),
+  create: data => productsApi.post('/', data),
+  update: (id, data) => productsApi.put(`/${id}`, data),
+  delete: id => productsApi.delete(`/${id}`),
+  search: q => productsApi.get('/search', { params: { q } }),
 };
 
-// ============ HEALTH CHECK ============
+// ─── STOCK ────────────────────────────────────────────────────
+const STOCK_URL = process.env.REACT_APP_STOCK_URL || 'http://localhost:5003/api/v1/stock';
+const stockApi = axios.create({ baseURL: STOCK_URL, withCredentials: true });
+stockApi.interceptors.request.use(config => {
+  const token = localStorage.getItem('accessToken');
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
 
-export const healthCheck = () => api.get('/health');
+export const stockAPI = {
+  entry: data => stockApi.post('/entry', data),
+  exit: data => stockApi.post('/exit', data),
+  getLevel: productId => stockApi.get(`/product/${productId}`),
+  getMovements: params => stockApi.get('/movements', { params }),
+  getAlerts: threshold => stockApi.get('/alerts', { params: { threshold } }),
+  getSummary: () => stockApi.get('/summary'),
+};
 
-// Export default api instance for custom calls
+// ─── SUPPLIERS ────────────────────────────────────────────────
+const SUPPLIERS_URL = process.env.REACT_APP_SUPPLIERS_URL || 'http://localhost:5004/api/v1/suppliers';
+const suppliersApi = axios.create({ baseURL: SUPPLIERS_URL, withCredentials: true });
+suppliersApi.interceptors.request.use(config => {
+  const token = localStorage.getItem('accessToken');
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+export const suppliersAPI = {
+  getAll: () => suppliersApi.get('/'),
+  getById: id => suppliersApi.get(`/${id}`),
+  create: data => suppliersApi.post('/', data),
+  update: (id, data) => suppliersApi.put(`/${id}`, data),
+  delete: id => suppliersApi.delete(`/${id}`),
+  search: q => suppliersApi.get('/search', { params: { q } }),
+  getActive: () => suppliersApi.get('/active'),
+};
+
 export default api;

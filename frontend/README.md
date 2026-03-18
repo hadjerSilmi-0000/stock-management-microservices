@@ -1,70 +1,128 @@
-# Getting Started with Create React App
+# StockFlow — Frontend
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Modern inventory management dashboard built with **React 18**, **React Router v6**, and a custom CSS design system in a deep orange + slate dark theme.
 
-## Available Scripts
+## 🚀 Quick Start
 
-In the project directory, you can run:
+```bash
+# 1. Install dependencies
+npm install
 
-### `npm start`
+# 2. Copy environment file
+cp .env.example .env.local
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+# 3. Start development server
+npm start
+```
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-### `npm test`
+## 🔐 Demo Credentials
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+| Role    | Email                     | Password   |
+|---------|---------------------------|------------|
+| Admin   | admin@stockflow.io        | admin123   |
+| Manager | manager@stockflow.io      | manager123 |
 
-### `npm run build`
+> **Note:** The app uses mock authentication by default. To connect to real backends, update your `.env.local` with the service URLs.
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+---
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## 📁 Project Structure
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+```
+src/
+├── App.jsx                        # Root router with all routes
+├── index.js                       # Entry point
+├── index.css                      # Global CSS design system
+│
+├── context/
+│   ├── AuthContext.jsx            # Auth state, login/logout
+│   └── ToastContext.jsx           # Toast notification system
+│
+├── components/
+│   ├── layout/
+│   │   ├── AppLayout.jsx          # Main authenticated layout
+│   │   ├── Sidebar.jsx            # Navigation sidebar
+│   │   ├── Topbar.jsx             # Top header bar
+│   │   └── RouteGuards.jsx        # Protected/Admin/Public route wrappers
+│   ├── ui/
+│   │   ├── Icon.jsx               # Inline SVG icon library
+│   │   └── FullLoader.jsx         # Full-page loading screen
+│   └── charts/
+│       └── Charts.jsx             # Sparkline, BarChart, DonutChart
+│
+├── pages/
+│   ├── public/
+│   │   ├── LandingPage.jsx        # Marketing landing page
+│   │   ├── LoginPage.jsx          # Split-panel login
+│   │   ├── RegisterPage.jsx       # Split-panel register
+│   │   ├── ForgotPasswordPage.jsx # Password reset request
+│   │   └── AuthHelperPages.jsx    # VerifyEmail + ResetPassword
+│   ├── protected/
+│   │   ├── DashboardPage.jsx      # Main KPI dashboard
+│   │   ├── ProductsPage.jsx       # Product CRUD table
+│   │   ├── StockPage.jsx          # Stock levels, movements, alerts
+│   │   ├── SuppliersPage.jsx      # Supplier card grid
+│   │   └── ProfileSettings.jsx    # Profile + Settings pages
+│   ├── admin/
+│   │   └── AdminPages.jsx         # AdminUsers + Reports (admin only)
+│   └── errors/
+│       └── ErrorPages.jsx         # 401 Unauthorized + 404 Not Found
+│
+└── services/
+    └── api.js                     # Axios clients for all 4 microservices
+```
 
-### `npm run eject`
+---
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+## 🎨 Design System
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+- **Fonts:** Syne (display/headings) + DM Sans (body)
+- **Palette:** Deep slate dark theme with orange `#f97316` accent
+- **Animations:** CSS keyframe animations with staggered delays
+- **Components:** Cards, badges, modals, tables, charts, toasts — all custom CSS
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+---
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+## 🔗 Microservice Connections
 
-## Learn More
+| Service   | Default URL                        | Purpose                       |
+|-----------|------------------------------------|-------------------------------|
+| Users     | `http://localhost:5001/api/v1/users`    | Auth, user management         |
+| Products  | `http://localhost:5002/api/v1/products` | Product catalog               |
+| Stock     | `http://localhost:5003/api/v1/stock`    | Inventory levels & movements  |
+| Suppliers | `http://localhost:5004/api/v1/suppliers`| Supplier management           |
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+---
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+## 📦 Build for Production
 
-### Code Splitting
+```bash
+npm run build
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+Output goes to `/build`. Serve with any static host (Nginx, Vercel, Netlify, S3+CloudFront).
 
-### Analyzing the Bundle Size
+---
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+## 🗺️ All Routes
 
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+| Path                    | Access      | Page                   |
+|-------------------------|-------------|------------------------|
+| `/`                     | Public      | Landing page           |
+| `/login`                | Public only | Login (split layout)   |
+| `/register`             | Public only | Register (split layout)|
+| `/forgot-password`      | Public only | Forgot password        |
+| `/reset-password/:token`| Public      | Reset password         |
+| `/verify-email/:token`  | Public      | Email verification     |
+| `/dashboard`            | Auth        | KPI Dashboard          |
+| `/products`             | Auth        | Product management     |
+| `/stock`                | Auth        | Stock management       |
+| `/suppliers`            | Auth        | Supplier management    |
+| `/profile`              | Auth        | User profile           |
+| `/settings`             | Auth        | App settings           |
+| `/admin/users`          | Admin only  | User management        |
+| `/admin/reports`        | Admin only  | Reports & analytics    |
+| `/unauthorized`         | Public      | 401 error page         |
+| `*`                     | Public      | 404 not found page     |

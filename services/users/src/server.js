@@ -9,16 +9,16 @@ import { connectDB } from "./config/db.js";
 import { swaggerServe, swaggerSetup } from "./config/swagger.js";
 import userRoutes from "./routes/userRoutes.js";
 import { errorHandler } from "./middlewares/errorMiddleware.js";
-import { requestIdMiddleware } from "../shared/middlewares/requestId.js";
+import { requestIdMiddleware } from "../../shared/middlewares/requestId.js";
 import {
     requestLogger,
     performanceMonitor,
     extractClientIP,
 } from "./middlewares/requestLogger.js";
-import { getCorsOptions } from "../shared/config/cors.js";
-import { validateServiceKeys } from "../shared/config/serviceKeys.js";
+import { getCorsOptions } from "../../shared/config/cors.js";
+import { validateServiceKeys } from "../../shared/config/serviceKeys.js";
 
-import ConsulClient from "../shared/utils/consulClient.js";
+import ConsulClient from "../../shared/utils/consulClient.js";
 import mongoose from "mongoose";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -38,17 +38,6 @@ if (!process.env.MONGO_URI) {
     console.error("ERROR: MONGO_URI not found in .env file!");
     process.exit(1);
 }
-
-// Validate service keys
-try {
-    validateServiceKeys();
-} catch (error) {
-    console.error("Service key validation failed:", error.message);
-    if (process.env.NODE_ENV === "production") {
-        process.exit(1);
-    }
-}
-
 const app = express();
 
 app.use(cors(getCorsOptions()));

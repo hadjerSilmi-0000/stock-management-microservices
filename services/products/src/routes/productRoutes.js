@@ -7,14 +7,14 @@ import {
     deleteProduct,
     searchProducts,
 } from "../controllers/productController.js";
+import { authMiddleware } from "../../../shared/middlewares/authMiddleware.js";
+import { validateObjectId } from "../../../shared/middlewares/validateObjectId.js";
+import { createOperationLimiter } from "../../../shared/middlewares/rateLimit.js";
+import { createHealthCheck } from "../../../shared/utils/healthCheck.js";
 import { roleMiddleware } from "../middlewares/roleMiddleware.js";
 import { validateRequest } from "../middlewares/validationMiddleware.js";
 import { createProductSchema, updateProductSchema } from "../validations/productValidation.js";
 import { paginationMiddleware } from "../utils/pagination.js";
-import { authMiddleware } from "../../shared/middlewares/authMiddleware.js";
-import { validateObjectId } from "../../shared/middlewares/validateObjectId.js";
-import { createOperationLimiter } from "../../shared/middlewares/rateLimit.js";
-import { createHealthCheck } from "../../shared/utils/healthCheck.js";
 
 const router = express.Router();
 

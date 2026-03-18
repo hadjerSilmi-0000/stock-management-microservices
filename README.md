@@ -1,399 +1,237 @@
-# Users Microservice
+# Backend Fixes — Setup & Integration Guide
 
-Authentication and user management service for Stock Management System.
+## What's included in this patch
 
-## 📍 Service Information
+| File | Type | Purpose |
+|------|------|---------|
+| `services/shared/utils/sendResponse.js` | NEW | Standardized response helper |
+| `services/users/src/app.js` | NEW | App factory (separates Express from server.listen) |
+| `services/products/src/app.js` | NEW | App factory |
+| `services/stock/src/app.js` | NEW | App factory |
+| `services/suppliers/src/app.js` | NEW | App factory |
+| `services/users/src/controllers/userController.js` | UPDATED | Standardized envelopes |
+| `services/users/src/routes/userRoutes.js` | UPDATED | Uses exported verifyToken handler |
+| `services/products/src/controllers/productController.js` | UPDATED | Standardized envelopes |
+| `services/stock/src/controllers/stockController.js` | UPDATED | Standardized envelopes |
+| `services/suppliers/src/controllers/supplierController.js` | UPDATED | Standardized envelopes |
+| `services/gateway/src/server.js` | NEW | API Gateway |
+| `services/gateway/.env` | NEW | Gateway environment config |
+| `services/gateway/package.json` | NEW | Gateway dependencies |
+| `jest.config.js` | NEW | Copy to each service root |
+| `services/users/src/__tests__/users.test.js` | NEW | Users tests |
+| `services/products/src/__tests__/products.test.js` | NEW | Products tests |
+| `services/stock/src/__tests__/stock.test.js` | NEW | Stock tests |
+| `services/suppliers/src/__tests__/suppliers.test.js` | NEW | Suppliers tests |
 
-- **Port:** 5001
-- **Database:** `users_db`
-- **Base URL:** `http://localhost:5001/api/users`
+---
 
-## 🚀 Quick Start
+## Step 1 — Copy files into your project
 
-### Prerequisites
-- Node.js 18+
-- MongoDB running on port 27017
-- Required environment variables (see `.env.example`)
+Copy each file from this patch to its matching path in your project.
 
-### Installation
-```bash
-npm install
+---
+
+## Step 2 — Update server.js files to use app factories
+
+Each service's `server.js` currently creates the Express app inline.
+You need to refactor it to import from `app.js` instead.
+
+### Pattern (same for all 4 services)
+
+**Before** — `services/users/src/server.js` had all middleware inline.
+
+**After** — replace the Express setup block with:
+
+```js
+// At the top of server.js, replace the app setup block with:
+import createApp from "./app.js";
+const app = createApp();
 ```
 
-### Run Development Server
+Remove these lines from server.js (they now live in app.js):
+```js
+// DELETE these from server.js — app.js handles them now:
+app.use(cors(...))
+app.use(requestIdMiddleware)
+app.use(extractClientIP)
+app.use(requestLogger)
+app.use(performanceMonitor)
+app.use(express.json())
+app.use(cookieParser())
+app.use("/api-docs", ...)
+app.use("/api/v1/...", routes)
+app.get("/", ...)
+app.use(errorHandler)
+```
+
+Keep in server.js: MongoDB connect, RabbitMQ setup, Consul register, graceful shutdown, app.listen().
+
+---
+
+## Step 3 — Install test dependencies (in each service folder)
+
 ```bash
+# Run this in each of the 4 service directories
+cd services/users
+npm install --save-dev jest supertest mongodb-memory-server
+
+cd ../products
+npm install --save-dev jest supertest mongodb-memory-server
+
+cd ../stock
+npm install --save-dev jest supertest mongodb-memory-server
+
+cd ../suppliers
+npm install --save-dev jest supertest mongodb-memory-server
+```
+
+---
+
+## Step 4 — Add jest config and scripts to each service's package.json
+
+Copy `jest.config.js` (from this patch) to each service root:
+```
+services/users/jest.config.js
+services/products/jest.config.js
+services/stock/jest.config.js
+services/suppliers/jest.config.js
+```
+
+Add these scripts to each service's `package.json`:
+```json
+"scripts": {
+  "test":          "node --experimental-vm-modules node_modules/.bin/jest",
+  "test:watch":    "node --experimental-vm-modules node_modules/.bin/jest --watch",
+  "test:coverage": "node --experimental-vm-modules node_modules/.bin/jest --coverage"
+}
+```
+
+---
+
+## Step 5 — Install and start the API Gateway
+
+```bash
+cd services/gateway
+npm install
 npm run dev
 ```
 
-### Run Production Server
+The gateway starts on **port 5000**.
+Your frontend should point ALL requests to `http://localhost:5000` instead of individual service ports.
+
+### Gateway routes
+
+| Frontend calls | Gateway forwards to |
+|----------------|---------------------|
+| `POST /api/v1/users/login` | users-service :5001 |
+| `GET /api/v1/products` | products-service :5002 |
+| `POST /api/v1/stock/entry` | stock-service :5003 |
+| `GET /api/v1/suppliers` | suppliers-service :5004 |
+
+### Gateway health check
+```
+GET http://localhost:5000/health
+```
+Returns status of all 4 upstream services.
+
+---
+
+## Step 6 — Run the tests
+
 ```bash
-npm start
+# From each service directory:
+cd services/users    && npm test
+cd services/products && npm test
+cd services/stock    && npm test
+cd services/suppliers && npm test
 ```
 
-## 🔐 User Roles
-
-- **Admin:** Full access (manage users, all CRUD operations)
-- **Manager:** Operational access (no user management)
-
-## 📡 API Endpoints
-
-### Public Endpoints
-
-#### Health Check
-```http
-GET /api/users/health
-```
-Returns service health status.
-
-#### Register User
-```http
-POST /api/users/register
-Content-Type: application/json
-
-{
-  "username": "johndoe",
-  "email": "john@example.com",
-  "password": "password123",
-  "confirmPassword": "password123",
-  "role": "manager"  // optional: "admin" or "manager", defaults to "manager"
-}
-```
-
-#### Login
-```http
-POST /api/users/login
-Content-Type: application/json
-
-{
-  "email": "john@example.com",
-  "password": "password123"
-}
-```
-Returns JWT tokens in HTTP-only cookies.
-
-#### Verify Email
-```http
-GET /api/users/verify-email/:token
-```
-
-#### Forgot Password
-```http
-POST /api/users/forgot-password
-Content-Type: application/json
-
-{
-  "email": "john@example.com"
-}
-```
-
-#### Reset Password
-```http
-POST /api/users/reset-password
-Content-Type: application/json
-
-{
-  "token": "reset_token_from_email",
-  "password": "newpassword123",
-  "confirmPassword": "newpassword123"
-}
-```
-
-#### Refresh Token
-```http
-POST /api/users/refresh-token
-```
-Uses refresh token from cookies to get new access token.
+Expected output: all green, ~8–10 tests per service.
 
 ---
 
-### Protected Endpoints (Require Authentication)
+## Step 7 — Update your frontend base URL
 
-#### Get Current User Profile
-```http
-GET /api/users/profile
-```
+```js
+// Before (calling services directly):
+const USERS_API    = "http://localhost:5001/api/v1/users";
+const PRODUCTS_API = "http://localhost:5002/api/v1/products";
 
-#### Logout
-```http
-POST /api/users/logout
-```
-
-#### Verify Token (For Other Microservices)
-```http
-GET /api/users/verify-token
-```
-Returns user info if token is valid. Used by other microservices to validate authentication.
-
----
-
-### Admin Only Endpoints
-
-#### Get All Users
-```http
-GET /api/users/
-```
-
-#### Get User by ID
-```http
-GET /api/users/:id
-```
-
-#### Update User
-```http
-PUT /api/users/:id
-Content-Type: application/json
-
-{
-  "username": "newusername",
-  "email": "newemail@example.com",
-  "role": "admin",
-  "status": "active",
-  "emailVerified": true
-}
-```
-
-#### Delete User (Soft Delete)
-```http
-DELETE /api/users/:id
-```
-Sets user status to "inactive" and revokes all sessions.
-
----
-
-## 🔑 Authentication
-
-This service uses JWT (JSON Web Tokens) for authentication:
-
-- **Access Token:** Expires in 15 minutes (stored in HTTP-only cookie)
-- **Refresh Token:** Expires in 7 days (stored in HTTP-only cookie)
-
-### How to Authenticate Requests
-
-1. Login via `/api/users/login`
-2. Cookies are automatically set
-3. Include cookies in subsequent requests
-4. Use `/api/users/refresh-token` when access token expires
-
----
-
-## 🔒 Security Features
-
-- ✅ Password hashing with bcrypt (12 rounds)
-- ✅ HTTP-only cookies for token storage
-- ✅ Rate limiting on login/register (5 attempts per 15 minutes)
-- ✅ Account lockout after 5 failed login attempts (30 minutes)
-- ✅ Email verification required for account activation
-- ✅ Password reset with time-limited tokens
-- ✅ Session management with database storage
-- ✅ Role-based access control (RBAC)
-
----
-
-## 🗄️ Database Schema
-
-### User Model
-```javascript
-{
-  username: String (unique),
-  email: String (unique),
-  password: String (hashed),
-  role: Enum ['admin', 'manager'],
-  status: Enum ['active', 'inactive', 'pending'],
-  emailVerified: Boolean,
-  passwordResetToken: String,
-  passwordResetExpires: Date,
-  createdAt: Date,
-  updatedAt: Date
-}
-```
-
-### Session Model
-```javascript
-{
-  userId: ObjectId (ref: User),
-  accessToken: String,
-  refreshToken: String,
-  userAgent: String,
-  ipAddress: String,
-  createdAt: Date,
-  updatedAt: Date
-}
+// After (everything through the gateway):
+const API_BASE = "http://localhost:5000/api/v1";
+// Then: ${API_BASE}/users, ${API_BASE}/products, etc.
 ```
 
 ---
 
-## 🌐 Inter-Service Communication
+## Standard response envelope (what the frontend receives)
 
-Other microservices can verify user authentication by calling:
-```http
-GET http://localhost:5001/api/users/verify-token
-Authorization: Bearer {token}
-```
-
-Response:
+### Success — single item
 ```json
 {
   "success": true,
-  "valid": true,
-  "user": {
-    "id": "...",
-    "username": "johndoe",
-    "email": "john@example.com",
-    "role": "manager",
-    "status": "active",
-    "emailVerified": true
+  "data": { "_id": "...", "name": "...", "..." : "..." },
+  "message": "Optional human note"
+}
+```
+
+### Success — list
+```json
+{
+  "success": true,
+  "data": [ {...}, {...} ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 45,
+    "totalPages": 3,
+    "hasNextPage": true,
+    "hasPrevPage": false
+  }
+}
+```
+
+### Success — mutation with no body (delete, logout)
+```json
+{
+  "success": true,
+  "data": null,
+  "message": "Deleted successfully"
+}
+```
+
+### Error
+```json
+{
+  "success": false,
+  "error": {
+    "code": "PRODUCT_NOT_FOUND",
+    "message": "Product not found",
+    "timestamp": "2026-01-17T22:00:00.000Z",
+    "details": [...]
   }
 }
 ```
 
 ---
 
-## 📧 Email Configuration
+## Startup order (development)
 
-Uses SMTP for sending emails (verification, password reset).
-
-Required environment variables:
-```env
-SMTP_HOST=sandbox.smtp.mailtrap.io
-SMTP_PORT=587
-SMTP_USER=your_user
-SMTP_PASS=your_pass
-EMAIL_FROM="Stock Management <noreply@stockmanagement.local>"
-FRONTEND_URL=http://localhost:5173
-```
-
----
-
-## 🧪 Testing
-
-### Manual Testing with curl
 ```bash
-# Health check
-curl http://localhost:5001/api/users/health
+# 1. Start infrastructure
+mongod                          # MongoDB
+rabbitmq-server                 # RabbitMQ
+consul agent -dev               # Consul
 
-# Register
-curl -X POST http://localhost:5001/api/users/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "testuser",
-    "email": "test@example.com",
-    "password": "test123",
-    "confirmPassword": "test123",
-    "role": "manager"
-  }'
+# 2. Start microservices (each in a separate terminal)
+cd services/users     && npm run dev   # :5001
+cd services/products  && npm run dev   # :5002
+cd services/stock     && npm run dev   # :5003
+cd services/suppliers && npm run dev   # :5004
 
-# Login
-curl -X POST http://localhost:5001/api/users/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "test@example.com",
-    "password": "test123"
-  }' \
-  -c cookies.txt
+# 3. Start gateway
+cd services/gateway   && npm run dev   # :5000
 
-# Get profile (using saved cookies)
-curl http://localhost:5001/api/users/profile \
-  -b cookies.txt
+# 4. Start frontend
+# Point it at http://localhost:5000
 ```
-
----
-
-## 📊 API Documentation
-
-Interactive API documentation available at:
-```
-http://localhost:5001/api-docs
-```
-
----
-
-## 🐛 Troubleshooting
-
-### Database Connection Issues
-```bash
-# Check MongoDB is running
-mongosh
-
-# Check database exists
-use users_db
-show collections
-```
-
-### Token Verification Fails
-- Ensure cookies are included in request
-- Check token hasn't expired
-- Verify JWT secrets in `.env` match
-
-### Email Not Sending
-- Check SMTP credentials
-- Verify `FRONTEND_URL` is set correctly
-- Check Mailtrap inbox for test emails
-
----
-
-## 📝 Environment Variables
-
-Create a `.env` file with:
-```env
-PORT=5001
-NODE_ENV=development
-FRONTEND_URL=http://localhost:5173
-
-MONGO_URI=mongodb://localhost:27017/users_db
-
-JWT_ACCESS_SECRET=your_secret_here
-JWT_REFRESH_SECRET=your_secret_here
-JWT_EMAIL_SECRET=your_secret_here
-JWT_PASSWORD_RESET_SECRET=your_secret_here
-
-SMTP_HOST=sandbox.smtp.mailtrap.io
-SMTP_PORT=587
-SMTP_USER=your_user
-SMTP_PASS=your_pass
-EMAIL_FROM="Stock Management <noreply@stockmanagement.local>"
-
-BCRYPT_ROUNDS=12
-MAX_LOGIN_ATTEMPTS=5
-LOCKOUT_DURATION=30
-```
-
----
-
-## 🏗️ Project Structure
-```
-services/users/
-├── src/
-│   ├── config/
-│   │   ├── db.js
-│   │   ├── jwt.js
-│   │   └── index.js
-│   ├── controllers/
-│   │   └── userController.js
-│   ├── middlewares/
-│   │   ├── authMiddleware.js
-│   │   ├── roleMiddleware.js
-│   │   ├── errorMiddleware.js
-│   │   └── rateLimit.js
-│   ├── models/
-│   │   ├── userModel.js
-│   │   └── sessionModel.js
-│   ├── routes/
-│   │   └── userRoutes.js
-│   ├── services/
-│   │   └── userService.js
-│   ├── utils/
-│   │   ├── mail.js
-│   │   └── logger.js
-│   ├── validations/
-│   │   └── userValidation.js
-│   └── server.js
-├── .env
-├── package.json
-└── README.md
-```
-
----
-
-## 👥 Author
-
-Part of Stock Management Microservices System

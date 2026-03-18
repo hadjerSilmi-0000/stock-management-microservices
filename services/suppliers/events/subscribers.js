@@ -2,11 +2,9 @@
  * Suppliers Service - Event Subscribers
  * File: services/suppliers/src/events/subscribers.js
  */
-
-import Supplier from "../models/supplierModel.js";
-import logger from "../utils/logger.js";
+import Supplier from "../src/models/supplierModel.js";
+import logger from "../src/utils/logger.js";
 import { EVENTS, EXCHANGES, QUEUES } from "../../shared/events/eventTypes.js";
-
 /**
  * Setup all event subscribers for Suppliers service
  * @param {RabbitMQClient} rabbitMQ

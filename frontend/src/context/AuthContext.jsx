@@ -1,174 +1,120 @@
-// context/AuthContext.jsx
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { authAPI } from '../services/api';
 
-// Create Auth Context
 const AuthContext = createContext(null);
+export const useAuth = () => useContext(AuthContext);
 
-// Custom hook to use auth context
-export const useAuth = () => {
-    const context = useContext(AuthContext);
-    if (!context) {
-        throw new Error('useAuth must be used within an AuthProvider');
-    }
-    return context;
-};
-
-// Auth Provider Component
 export const AuthProvider = ({ children }) => {
-    const [user, setUser] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-    // Initialize auth state from localStorage
-    useEffect(() => {
-        const initAuth = async () => {
-            try {
-                const storedUser = localStorage.getItem('user');
-                const accessToken = localStorage.getItem('accessToken');
+  // On mount: verify existing token with backend
+  useEffect(() => {
+    const initAuth = async () => {
+      const storedUser = localStorage.getItem('sf_user');
+      if (!storedUser) { setLoading(false); return; }
 
-                if (storedUser && accessToken) {
-                    // Parse stored user
-                    const parsedUser = JSON.parse(storedUser);
-                    setUser(parsedUser);
-                    setIsAuthenticated(true);
-
-                    // Verify token is still valid
-                    try {
-                        const response = await authAPI.verifyToken();
-                        if (response.data.valid) {
-                            // Update user data from server
-                            setUser(response.data.user);
-                        }
-                    } catch (error) {
-                        console.error('Token verification failed:', error);
-                        // Token invalid, clear auth state
-                        logout();
-                    }
-                }
-            } catch (error) {
-                console.error('Auth initialization error:', error);
-                logout();
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        initAuth();
-    }, []);
-
-    // Login function
-    const login = async (credentials) => {
-        try {
-            const response = await authAPI.login(credentials);
-            const { accessToken, refreshToken, user: userData } = response.data;
-
-            // Store tokens and user data
-            localStorage.setItem('accessToken', accessToken);
-            localStorage.setItem('refreshToken', refreshToken);
-            localStorage.setItem('user', JSON.stringify(userData));
-
-            // Update state
-            setUser(userData);
-            setIsAuthenticated(true);
-
-            return { success: true, user: userData };
-        } catch (error) {
-            console.error('Login error:', error);
-            return {
-                success: false,
-                message: error.response?.data?.message || 'Login failed',
-            };
+      try {
+        // Verify token is still valid with users service
+        const res = await authAPI.verifyToken();
+        if (res.data.valid) {
+          setUser(res.data.user);
+        } else {
+          clearStorage();
         }
+      } catch {
+        // Token invalid or service down — clear and force re-login
+        clearStorage();
+      } finally {
+        setLoading(false);
+      }
     };
+    initAuth();
+  }, []);
 
-    // Register function
-    const register = async (userData) => {
-        try {
-            const response = await authAPI.register(userData);
-            return {
-                success: true,
-                message: response.data.message || 'Registration successful! Please verify your email.',
-            };
-        } catch (error) {
-            console.error('Registration error:', error);
-            return {
-                success: false,
-                message: error.response?.data?.message || 'Registration failed',
-            };
-        }
-    };
+  const clearStorage = () => {
+    localStorage.removeItem('sf_user');
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    setUser(null);
+  };
 
-    // Logout function
-    const logout = async () => {
-        try {
-            await authAPI.logout();
-        } catch (error) {
-            console.error('Logout error:', error);
-        } finally {
-            // Clear local storage
-            localStorage.removeItem('accessToken');
-            localStorage.removeItem('refreshToken');
-            localStorage.removeItem('user');
+  // ── LOGIN ──────────────────────────────────────────────────────
+  const login = async (email, password) => {
+    try {
+      const res = await authAPI.login({ email, password });
+      const { user: userData, accessToken, refreshToken } = res.data;
 
-            // Clear state
-            setUser(null);
-            setIsAuthenticated(false);
-        }
-    };
+      // Your backend sets httpOnly cookies AND returns tokens in body
+      // Store them both ways for maximum compatibility
+      if (accessToken) localStorage.setItem('accessToken', accessToken);
+      if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
+      localStorage.setItem('sf_user', JSON.stringify(userData));
+      setUser(userData);
+      return { success: true, user: userData };
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Login failed. Check your credentials.';
+      return { success: false, message: msg };
+    }
+  };
 
-    // Update user profile
-    const updateProfile = async () => {
-        try {
-            const response = await authAPI.getProfile();
-            const updatedUser = response.data.user;
+  // ── REGISTER ───────────────────────────────────────────────────
+  const register = async (formData) => {
+    try {
+      const res = await authAPI.register({
+        username: formData.username,
+        email: formData.email,
+        password: formData.password,
+        confirmPassword: formData.confirmPassword,
+        role: formData.role || 'manager',
+      });
+      return { success: true, message: res.data.message || 'Registration successful! Please verify your email.' };
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Registration failed. Please try again.';
+      return { success: false, message: msg };
+    }
+  };
 
-            setUser(updatedUser);
-            localStorage.setItem('user', JSON.stringify(updatedUser));
+  // ── LOGOUT ─────────────────────────────────────────────────────
+  const logout = useCallback(async () => {
+    try {
+      await authAPI.logout();
+    } catch {
+      // ignore logout errors — we clear locally regardless
+    } finally {
+      clearStorage();
+    }
+  }, []);
 
-            return { success: true, user: updatedUser };
-        } catch (error) {
-            console.error('Update profile error:', error);
-            return {
-                success: false,
-                message: error.response?.data?.message || 'Failed to update profile',
-            };
-        }
-    };
+  // ── UPDATE PROFILE ─────────────────────────────────────────────
+  const refreshProfile = async () => {
+    try {
+      const res = await authAPI.getProfile();
+      const updated = res.data.user;
+      setUser(updated);
+      localStorage.setItem('sf_user', JSON.stringify(updated));
+      return { success: true, user: updated };
+    } catch (err) {
+      return { success: false, message: err.response?.data?.message || 'Failed to refresh profile' };
+    }
+  };
 
-    // Check if user has specific role
-    const hasRole = (role) => {
-        return user?.role === role;
-    };
+  const isAdmin = () => user?.role === 'admin';
 
-    // Check if user is admin
-    const isAdmin = () => {
-        return user?.role === 'admin';
-    };
-
-    // Check if email is verified
-    const isEmailVerified = () => {
-        return user?.emailVerified === true;
-    };
-
-    const value = {
-        user,
-        loading,
-        isAuthenticated,
-        login,
-        register,
-        logout,
-        updateProfile,
-        hasRole,
-        isAdmin,
-        isEmailVerified,
-    };
-
-    return (
-        <AuthContext.Provider value={value}>
-            {children}
-        </AuthContext.Provider>
-    );
+  return (
+    <AuthContext.Provider value={{
+      user,
+      loading,
+      isAuthenticated: !!user,
+      login,
+      register,
+      logout,
+      refreshProfile,
+      isAdmin,
+    }}>
+      {children}
+    </AuthContext.Provider>
+  );
 };
 
 export default AuthContext;

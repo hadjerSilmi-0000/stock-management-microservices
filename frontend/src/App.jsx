@@ -1,191 +1,86 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
+import { ToastProvider } from './context/ToastContext';
+import { ProtectedRoute, AdminRoute, PublicRoute } from './components/layout/RouteGuards';
 
-// ✅ Public Pages
+// Public
+import LandingPage from './pages/public/LandingPage';
 import LoginPage from './pages/public/LoginPage';
 import RegisterPage from './pages/public/RegisterPage';
-import VerifyEmailPage from './pages/public/VerifyEmailPage';
 import ForgotPasswordPage from './pages/public/ForgotPasswordPage';
-import ResetPasswordPage from './pages/public/ResetPasswordPage';
+import { ResetPasswordPage, VerifyEmailPage } from './pages/public/AuthHelperPages';
 
-/* 
-// 🚧 Uncomment these when the files exist
-
-// ✅ Protected Pages
+// Protected
 import DashboardPage from './pages/protected/DashboardPage';
-import ProfilePage from './pages/protected/ProfilePage';
+import ProductsPage from './pages/protected/ProductsPage';
+import StockPage from './pages/protected/StockPage';
+import SuppliersPage from './pages/protected/SuppliersPage';
+import { ProfilePage, SettingsPage } from './pages/protected/ProfileSettings';
 
-// ✅ Admin Pages
-import AdminDashboard from './pages/admin/AdminDashboard';
-import UsersListPage from './pages/admin/UsersListPage';
-import UserDetailsPage from './pages/admin/UserDetailsPage';
-import AddUserPage from './pages/admin/AddUserPage';
-import EditUserPage from './pages/admin/EditUserPage';
+// Admin
+import { AdminUsersPage, ReportsPage } from './pages/admin/AdminPages';
 
-// ✅ Error Pages
-import UnauthorizedPage from './pages/errors/UnauthorizedPage';
-import NotFoundPage from './pages/errors/NotFoundPage';
-*/
+// Errors
+import { UnauthorizedPage, NotFoundPage } from './pages/errors/ErrorPages';
 
-// 🌀 Loading Component
-const LoadingScreen = () => (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <div className="text-center">
-            <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600 text-lg">Loading...</p>
-        </div>
-    </div>
-);
+function App() {
+  return (
+    <Router>
+      <AuthProvider>
+        <ToastProvider>
+          <Routes>
+            {/* ── PUBLIC ── */}
+            <Route path="/" element={<LandingPage />} />
 
-// 🔒 Protected Route Wrapper
-const ProtectedRoute = ({ children }) => {
-    const { isAuthenticated, loading } = useAuth();
-
-    if (loading) return <LoadingScreen />;
-    if (!isAuthenticated) return <Navigate to="/login" replace />;
-    return children;
-};
-
-// 👑 Admin Route Wrapper
-const AdminRoute = ({ children }) => {
-    const { isAuthenticated, isAdmin, loading } = useAuth();
-
-    if (loading) return <LoadingScreen />;
-    if (!isAuthenticated) return <Navigate to="/login" replace />;
-    if (!isAdmin()) return <Navigate to="/unauthorized" replace />;
-
-    return children;
-};
-
-// 🌐 Public Route Wrapper
-const PublicRoute = ({ children }) => {
-    const { isAuthenticated, loading } = useAuth();
-
-    if (loading) return <LoadingScreen />;
-    if (isAuthenticated) return <Navigate to="/dashboard" replace />;
-
-    return children;
-};
-
-// 🌍 Main Routes
-function AppRoutes() {
-    return (
-        <Routes>
-            {/* ================= PUBLIC ROUTES ================= */}
-            <Route
-                path="/login"
-                element={
-                    <PublicRoute>
-                        <LoginPage />
-                    </PublicRoute>
-                }
-            />
-            <Route
-                path="/register"
-                element={
-                    <PublicRoute>
-                        <RegisterPage />
-                    </PublicRoute>
-                }
-            />
-            <Route path="/verify-email/:token" element={<VerifyEmailPage />} />
-            <Route
-                path="/forgot-password"
-                element={
-                    <PublicRoute>
-                        <ForgotPasswordPage />
-                    </PublicRoute>
-                }
-            />
+            <Route path="/login" element={
+              <PublicRoute><LoginPage /></PublicRoute>
+            } />
+            <Route path="/register" element={
+              <PublicRoute><RegisterPage /></PublicRoute>
+            } />
+            <Route path="/forgot-password" element={
+              <PublicRoute><ForgotPasswordPage /></PublicRoute>
+            } />
             <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
+            <Route path="/verify-email/:token" element={<VerifyEmailPage />} />
 
-            {/* ================= PROTECTED ROUTES (commented for now) ================= */}
-            {/*
-            <Route
-                path="/dashboard"
-                element={
-                    <ProtectedRoute>
-                        <DashboardPage />
-                    </ProtectedRoute>
-                }
-            />
-            <Route
-                path="/profile"
-                element={
-                    <ProtectedRoute>
-                        <ProfilePage />
-                    </ProtectedRoute>
-                }
-            />
-            */}
+            {/* ── PROTECTED ── */}
+            <Route path="/dashboard" element={
+              <ProtectedRoute><DashboardPage /></ProtectedRoute>
+            } />
+            <Route path="/products" element={
+              <ProtectedRoute><ProductsPage /></ProtectedRoute>
+            } />
+            <Route path="/stock" element={
+              <ProtectedRoute><StockPage /></ProtectedRoute>
+            } />
+            <Route path="/suppliers" element={
+              <ProtectedRoute><SuppliersPage /></ProtectedRoute>
+            } />
+            <Route path="/profile" element={
+              <ProtectedRoute><ProfilePage /></ProtectedRoute>
+            } />
+            <Route path="/settings" element={
+              <ProtectedRoute><SettingsPage /></ProtectedRoute>
+            } />
 
-            {/* ================= ADMIN ROUTES (commented for now) ================= */}
-            {/*
-            <Route
-                path="/admin/dashboard"
-                element={
-                    <AdminRoute>
-                        <AdminDashboard />
-                    </AdminRoute>
-                }
-            />
-            <Route
-                path="/admin/users"
-                element={
-                    <AdminRoute>
-                        <UsersListPage />
-                    </AdminRoute>
-                }
-            />
-            <Route
-                path="/admin/users/new"
-                element={
-                    <AdminRoute>
-                        <AddUserPage />
-                    </AdminRoute>
-                }
-            />
-            <Route
-                path="/admin/users/:id"
-                element={
-                    <AdminRoute>
-                        <UserDetailsPage />
-                    </AdminRoute>
-                }
-            />
-            <Route
-                path="/admin/users/:id/edit"
-                element={
-                    <AdminRoute>
-                        <EditUserPage />
-                    </AdminRoute>
-                }
-            />
-            */}
+            {/* ── ADMIN ── */}
+            <Route path="/admin/users" element={
+              <AdminRoute><AdminUsersPage /></AdminRoute>
+            } />
+            <Route path="/admin/reports" element={
+              <AdminRoute><ReportsPage /></AdminRoute>
+            } />
 
-            {/* ================= ERROR PAGES (commented for now) ================= */}
-            {/*
+            {/* ── ERRORS ── */}
             <Route path="/unauthorized" element={<UnauthorizedPage />} />
             <Route path="/404" element={<NotFoundPage />} />
-            */}
-
-            {/* ================= DEFAULT ROUTES ================= */}
-            <Route path="/" element={<Navigate to="/login" replace />} />
-            {/* When NotFoundPage exists, use it here */}
-            {/* <Route path="*" element={<NotFoundPage />} /> */}
-        </Routes>
-    );
-}
-
-// 🌟 Root App Component
-function App() {
-    return (
-        <Router>
-            <AuthProvider>
-                <AppRoutes />
-            </AuthProvider>
-        </Router>
-    );
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
+        </ToastProvider>
+      </AuthProvider>
+    </Router>
+  );
 }
 
 export default App;
