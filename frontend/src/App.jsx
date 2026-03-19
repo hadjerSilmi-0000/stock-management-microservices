@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
+import { ThemeProvider } from './context/ThemeContext';
 import { ProtectedRoute, AdminRoute, PublicRoute } from './components/layout/RouteGuards';
 
 // Public
@@ -25,61 +26,40 @@ import { UnauthorizedPage, NotFoundPage } from './pages/errors/ErrorPages';
 
 function App() {
   return (
-    <Router>
-      <AuthProvider>
-        <ToastProvider>
-          <Routes>
-            {/* ── PUBLIC ── */}
-            <Route path="/" element={<LandingPage />} />
+    <ThemeProvider>
+      <Router>
+        <AuthProvider>
+          <ToastProvider>
+            <Routes>
+              {/* ── PUBLIC ── */}
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
+              <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
+              <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
+              <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
+              <Route path="/verify-email/:token" element={<VerifyEmailPage />} />
 
-            <Route path="/login" element={
-              <PublicRoute><LoginPage /></PublicRoute>
-            } />
-            <Route path="/register" element={
-              <PublicRoute><RegisterPage /></PublicRoute>
-            } />
-            <Route path="/forgot-password" element={
-              <PublicRoute><ForgotPasswordPage /></PublicRoute>
-            } />
-            <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
-            <Route path="/verify-email/:token" element={<VerifyEmailPage />} />
+              {/* ── PROTECTED ── */}
+              <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+              <Route path="/products" element={<ProtectedRoute><ProductsPage /></ProtectedRoute>} />
+              <Route path="/stock" element={<ProtectedRoute><StockPage /></ProtectedRoute>} />
+              <Route path="/suppliers" element={<ProtectedRoute><SuppliersPage /></ProtectedRoute>} />
+              <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+              <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
 
-            {/* ── PROTECTED ── */}
-            <Route path="/dashboard" element={
-              <ProtectedRoute><DashboardPage /></ProtectedRoute>
-            } />
-            <Route path="/products" element={
-              <ProtectedRoute><ProductsPage /></ProtectedRoute>
-            } />
-            <Route path="/stock" element={
-              <ProtectedRoute><StockPage /></ProtectedRoute>
-            } />
-            <Route path="/suppliers" element={
-              <ProtectedRoute><SuppliersPage /></ProtectedRoute>
-            } />
-            <Route path="/profile" element={
-              <ProtectedRoute><ProfilePage /></ProtectedRoute>
-            } />
-            <Route path="/settings" element={
-              <ProtectedRoute><SettingsPage /></ProtectedRoute>
-            } />
+              {/* ── ADMIN ── */}
+              <Route path="/admin/users" element={<AdminRoute><AdminUsersPage /></AdminRoute>} />
+              <Route path="/admin/reports" element={<AdminRoute><ReportsPage /></AdminRoute>} />
 
-            {/* ── ADMIN ── */}
-            <Route path="/admin/users" element={
-              <AdminRoute><AdminUsersPage /></AdminRoute>
-            } />
-            <Route path="/admin/reports" element={
-              <AdminRoute><ReportsPage /></AdminRoute>
-            } />
-
-            {/* ── ERRORS ── */}
-            <Route path="/unauthorized" element={<UnauthorizedPage />} />
-            <Route path="/404" element={<NotFoundPage />} />
-            <Route path="*" element={<NotFoundPage />} />
-          </Routes>
-        </ToastProvider>
-      </AuthProvider>
-    </Router>
+              {/* ── ERRORS ── */}
+              <Route path="/unauthorized" element={<UnauthorizedPage />} />
+              <Route path="/404" element={<NotFoundPage />} />
+              <Route path="*" element={<NotFoundPage />} />
+            </Routes>
+          </ToastProvider>
+        </AuthProvider>
+      </Router>
+    </ThemeProvider>
   );
 }
 

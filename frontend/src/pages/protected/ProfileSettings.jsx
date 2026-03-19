@@ -5,6 +5,7 @@ import Icon from '../../components/ui/Icon';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { authAPI } from '../../services/api';
+import { useTheme } from '../../context/ThemeContext';
 
 /* ─── PROFILE PAGE ───────────────────────────────────────────────────────── */
 export const ProfilePage = () => {
@@ -16,32 +17,32 @@ export const ProfilePage = () => {
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPw, setSavingPw] = useState(false);
 
-  // ── Update profile ────────────────────────────────────────────
   const handleProfileSave = async () => {
+    if (!form.username.trim()) return toast('Username is required', 'error');
     setSavingProfile(true);
     try {
       await authAPI.updateProfile({ username: form.username, email: form.email });
-      await refreshProfile(); // Sync updated data back into AuthContext
+      await refreshProfile();
       toast('Profile updated successfully', 'success');
     } catch (err) {
-      toast(err.response?.data?.message || 'Failed to update profile', 'error');
+      toast(err.response?.data?.message || err.response?.data?.error?.message || 'Failed to update profile', 'error');
     } finally {
       setSavingProfile(false);
     }
   };
 
-  // ── Change password ───────────────────────────────────────────
   const handlePwSave = async (e) => {
     e.preventDefault();
     if (pwForm.newPassword !== pwForm.confirmPassword) return toast('Passwords do not match', 'error');
     if (pwForm.newPassword.length < 6) return toast('Password must be at least 6 characters', 'error');
+    if (!pwForm.currentPassword) return toast('Current password is required', 'error');
     setSavingPw(true);
     try {
       await authAPI.changePassword({ currentPassword: pwForm.currentPassword, newPassword: pwForm.newPassword });
       toast('Password changed successfully', 'success');
       setPwForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
     } catch (err) {
-      toast(err.response?.data?.message || 'Password change failed', 'error');
+      toast(err.response?.data?.message || err.response?.data?.error?.message || 'Password change failed', 'error');
     } finally {
       setSavingPw(false);
     }
@@ -59,7 +60,6 @@ export const ProfilePage = () => {
         <p className="page-subtitle">Manage your account information and security</p>
       </div>
 
-      {/* Header card */}
       <div className="profile-header animate-fadeInUp">
         <div className="profile-avatar-lg">{user?.username?.[0]?.toUpperCase()}</div>
         <div>
@@ -74,7 +74,7 @@ export const ProfilePage = () => {
               {user?.emailVerified ? 'Email Verified' : 'Unverified'}
             </span>
             <span className={`badge ${user?.status === 'active' ? 'badge-green' : 'badge-slate'}`}>
-              <Icon name="Activity" size={10} />{user?.status}
+              <Icon name="Activity" size={10} />{user?.status || 'active'}
             </span>
           </div>
         </div>
@@ -88,7 +88,7 @@ export const ProfilePage = () => {
       <div className="grid-2">
         {/* Personal Info */}
         <div className="card animate-fadeInUp delay-200">
-          <h3 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 17, color: 'white', marginBottom: 20 }}>Personal Information</h3>
+          <h3 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 17, color: 'var(--text-primary)', marginBottom: 20 }}>Personal Information</h3>
           <div className="form-group">
             <label className="form-label">Username</label>
             <input className="form-input" value={form.username} onChange={e => setForm(p => ({ ...p, username: e.target.value }))} />
@@ -100,7 +100,7 @@ export const ProfilePage = () => {
           <div className="form-group">
             <label className="form-label">Role</label>
             <input className="form-input" value={user?.role || ''} readOnly style={{ opacity: 0.6, cursor: 'not-allowed' }} />
-            <p style={{ fontSize: 11, color: 'var(--slate-500)', marginTop: 4 }}>Role is set by an administrator</p>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Role is set by an administrator</p>
           </div>
           <button className="btn btn-orange" onClick={handleProfileSave} disabled={savingProfile}>
             {savingProfile
@@ -111,7 +111,7 @@ export const ProfilePage = () => {
 
         {/* Change Password */}
         <div className="card animate-fadeInUp delay-300">
-          <h3 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 17, color: 'white', marginBottom: 20 }}>Change Password</h3>
+          <h3 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 17, color: 'var(--text-primary)', marginBottom: 20 }}>Change Password</h3>
           <form onSubmit={handlePwSave}>
             <div className="form-group">
               <label className="form-label">Current Password</label>
@@ -139,16 +139,16 @@ export const ProfilePage = () => {
 
       {/* Account info */}
       <div className="card animate-fadeInUp delay-400" style={{ marginTop: 16 }}>
-        <h3 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 17, color: 'white', marginBottom: 16 }}>Account Details</h3>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 17, color: 'var(--text-primary)', marginBottom: 16 }}>Account Details</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
           {[
             { label: 'User ID', value: user?.id || user?._id || '—', mono: true },
             { label: 'Member Since', value: user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A' },
             { label: 'Last Updated', value: user?.updatedAt ? new Date(user.updatedAt).toLocaleDateString() : 'N/A' },
           ].map((item, i) => (
-            <div key={i} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '12px 14px' }}>
-              <div style={{ fontSize: 11, color: 'var(--slate-600)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{item.label}</div>
-              <div style={{ fontSize: item.mono ? 11 : 14, fontWeight: 500, color: 'var(--slate-200)', fontFamily: item.mono ? 'monospace' : 'inherit', wordBreak: 'break-all' }}>{item.value}</div>
+            <div key={i} style={{ background: 'var(--bg-hover)', borderRadius: 8, padding: '12px 14px' }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{item.label}</div>
+              <div style={{ fontSize: item.mono ? 11 : 14, fontWeight: 500, color: 'var(--text-primary)', fontFamily: item.mono ? 'monospace' : 'inherit', wordBreak: 'break-all' }}>{item.value}</div>
             </div>
           ))}
         </div>
@@ -160,43 +160,103 @@ export const ProfilePage = () => {
 /* ─── SETTINGS PAGE ──────────────────────────────────────────────────────── */
 export const SettingsPage = () => {
   const { toast } = useToast();
-  const [settings, setSettings] = useState({ lowStockDefault: 10, emailAlerts: true, criticalAlerts: true, darkMode: true, language: 'en', timezone: 'UTC' });
+  const { theme, toggleTheme } = useTheme();
+  const [settings, setSettings] = useState({
+    lowStockDefault: 10,
+    emailAlerts: true,
+    criticalAlerts: true,
+    language: 'en',
+    timezone: 'UTC'
+  });
   const [saving, setSaving] = useState(false);
   const toggle = k => setSettings(p => ({ ...p, [k]: !p[k] }));
 
   const handleSave = async () => {
     setSaving(true);
-    await new Promise(r => setTimeout(r, 600)); // Simulate save
+    // Settings are local preferences (theme, display) — no backend endpoint exists for these
+    // Real settings like low-stock threshold are per-product, not global
+    await new Promise(r => setTimeout(r, 500));
+    localStorage.setItem('sf_settings', JSON.stringify(settings));
     setSaving(false);
     toast('Settings saved', 'success');
   };
 
-  const Toggle = ({ k }) => (
-    <div onClick={() => toggle(k)} style={{ width: 40, height: 22, borderRadius: 999, background: settings[k] ? 'var(--orange-500)' : 'rgba(255,255,255,0.1)', cursor: 'pointer', transition: 'background .2s', position: 'relative', flexShrink: 0 }}>
-      <div style={{ position: 'absolute', top: 3, left: settings[k] ? 'calc(100% - 19px)' : 3, width: 16, height: 16, borderRadius: '50%', background: 'white', transition: 'left .2s', boxShadow: '0 1px 4px rgba(0,0,0,0.3)' }} />
-    </div>
+  const Toggle = ({ value, onClick }) => (
+    <button
+      onClick={onClick}
+      style={{
+        width: 44, height: 24, borderRadius: 999,
+        background: value ? 'var(--orange-500)' : 'var(--border)',
+        cursor: 'pointer', transition: 'background .2s',
+        position: 'relative', flexShrink: 0, border: 'none'
+      }}
+    >
+      <div style={{
+        position: 'absolute', top: 4,
+        left: value ? 'calc(100% - 20px)' : 4,
+        width: 16, height: 16, borderRadius: '50%',
+        background: 'white', transition: 'left .2s',
+        boxShadow: '0 1px 4px rgba(0,0,0,0.3)'
+      }} />
+    </button>
   );
 
   const SECTIONS = [
     {
       title: 'Inventory Defaults',
+      desc: 'These are display preferences stored on your device',
       items: [
-        { label: 'Default Low Stock Threshold', desc: 'Alert when stock falls below this quantity', control: <input className="form-input" type="number" min={0} value={settings.lowStockDefault} onChange={e => setSettings(p => ({ ...p, lowStockDefault: +e.target.value }))} style={{ width: 80, padding: '6px 10px', textAlign: 'center' }} /> },
-        { label: 'Language', desc: 'Interface language preference', control: <select className="form-select" style={{ width: 120 }} value={settings.language} onChange={e => setSettings(p => ({ ...p, language: e.target.value }))}><option value="en">English</option><option value="fr">Français</option><option value="ar">العربية</option></select> },
-        { label: 'Timezone', desc: 'Used for timestamps and reports', control: <select className="form-select" style={{ width: 140 }} value={settings.timezone} onChange={e => setSettings(p => ({ ...p, timezone: e.target.value }))}><option>UTC</option><option>UTC+1</option><option>UTC+3</option></select> },
+        {
+          label: 'Default Low Stock Threshold',
+          desc: 'Used when creating new products (per-product thresholds override this)',
+          control: (
+            <input
+              className="form-input"
+              type="number" min={0} value={settings.lowStockDefault}
+              onChange={e => setSettings(p => ({ ...p, lowStockDefault: +e.target.value }))}
+              style={{ width: 80, padding: '6px 10px', textAlign: 'center' }}
+            />
+          )
+        },
+        {
+          label: 'Interface Language',
+          desc: 'Display language preference',
+          control: (
+            <select className="form-select" style={{ width: 130 }} value={settings.language} onChange={e => setSettings(p => ({ ...p, language: e.target.value }))}>
+              <option value="en">English</option>
+              <option value="fr">Français</option>
+              <option value="ar">العربية</option>
+            </select>
+          )
+        },
+        {
+          label: 'Timezone',
+          desc: 'Used for displaying timestamps',
+          control: (
+            <select className="form-select" style={{ width: 130 }} value={settings.timezone} onChange={e => setSettings(p => ({ ...p, timezone: e.target.value }))}>
+              <option>UTC</option><option>UTC+1</option><option>UTC+3</option><option>UTC+5</option>
+            </select>
+          )
+        },
       ],
     },
     {
       title: 'Notifications',
+      desc: 'Control which alerts you see in the dashboard',
       items: [
-        { label: 'Email Alerts', desc: 'Receive low stock notifications via email', control: <Toggle k="emailAlerts" /> },
-        { label: 'Critical Stock Alerts', desc: 'Get notified for critical & out-of-stock events', control: <Toggle k="criticalAlerts" /> },
+        { label: 'Email Alerts', desc: 'Show low stock notification badges', control: <Toggle value={settings.emailAlerts} onClick={() => toggle('emailAlerts')} /> },
+        { label: 'Critical Stock Alerts', desc: 'Highlight products at or below minimum stock', control: <Toggle value={settings.criticalAlerts} onClick={() => toggle('criticalAlerts')} /> },
       ],
     },
     {
       title: 'Appearance',
+      desc: 'Customize how StockFlow looks',
       items: [
-        { label: 'Dark Mode', desc: 'Use dark theme across the application', control: <Toggle k="darkMode" /> },
+        {
+          label: 'Dark Mode',
+          desc: `Currently using ${theme} theme`,
+          control: <Toggle value={theme === 'dark'} onClick={toggleTheme} />
+        },
       ],
     },
   ];
@@ -211,18 +271,33 @@ export const SettingsPage = () => {
       <div style={{ maxWidth: 680, display: 'flex', flexDirection: 'column', gap: 16 }}>
         {SECTIONS.map((section, si) => (
           <div key={si} className="card animate-fadeInUp" style={{ animationDelay: `${si * 0.1}s` }}>
-            <h3 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 16, color: 'white', marginBottom: 16 }}>{section.title}</h3>
+            <div style={{ marginBottom: 20 }}>
+              <h3 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 16, color: 'var(--text-primary)', marginBottom: 4 }}>{section.title}</h3>
+              {section.desc && <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{section.desc}</p>}
+            </div>
             {section.items.map((item, ii) => (
-              <div key={ii} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: ii < section.items.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
+              <div key={ii} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: ii < section.items.length - 1 ? '1px solid var(--border)' : 'none' }}>
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--slate-200)', marginBottom: 2 }}>{item.label}</div>
-                  <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>{item.desc}</div>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)', marginBottom: 2 }}>{item.label}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{item.desc}</div>
                 </div>
                 {item.control}
               </div>
             ))}
           </div>
         ))}
+
+        <div className="card animate-fadeInUp" style={{ animationDelay: '0.3s', background: 'rgba(249,115,22,0.04)', borderColor: 'rgba(249,115,22,0.15)' }}>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+            <Icon name="AlertCircle" size={16} style={{ color: 'var(--orange-400)', flexShrink: 0, marginTop: 2 }} />
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>Settings are stored locally</div>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                Display preferences (theme, language, timezone) are saved on this device. Product-level settings like low stock thresholds are configured per-product in the Products page.
+              </div>
+            </div>
+          </div>
+        </div>
 
         <button className="btn btn-orange" style={{ width: 'fit-content' }} onClick={handleSave} disabled={saving}>
           {saving

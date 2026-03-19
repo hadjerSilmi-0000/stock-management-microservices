@@ -41,7 +41,7 @@ export const register = async (req, res, next) => {
     } catch (err) { next(err); }
 };
 
-// ── LOGIN — returns accessToken in body so frontend can store it ──────────────
+// ── LOGIN — returns both tokens in body so frontend can store them ─────────────
 export const login = async (req, res, next) => {
     try {
         const { email, password } = req.body;
@@ -63,23 +63,27 @@ export const login = async (req, res, next) => {
         await userService.resetFailedLoginAttempts(user._id, ipAddress);
         const { accessToken, refreshToken } = await userService.generateAndStoreTokens(user, { ipAddress, userAgent });
 
-        // Set httpOnly cookies (for browser requests)
+        // Set httpOnly cookies (for browser requests on same domain)
         userService.setAuthCookies(res, accessToken, refreshToken);
 
-        // Also return token in body so frontend can store as Bearer token
+        // Also return BOTH tokens in body so frontend can store them
+        // (needed when frontend and API run on different ports in dev)
         return sendSuccess(res, 200, {
             id: user._id,
             username: user.username,
             email: user.email,
             role: user.role,
             accessToken,
+            refreshToken,
         }, "Login successful");
     } catch (err) { next(err); }
 };
 
+// ── REFRESH TOKEN — accepts token from cookie OR request body ─────────────────
 export const refreshToken = async (req, res, next) => {
     try {
-        const refreshTokenCookie = req.cookies.refreshToken;
+        // Accept refreshToken from cookie (same-domain) or body (cross-port dev)
+        const refreshTokenCookie = req.cookies.refreshToken || req.body?.refreshToken;
         if (!refreshTokenCookie) return sendError(res, 401, "No refresh token provided", "UNAUTHORIZED");
 
         const { valid, decoded } = await userService.validateRefreshToken(refreshTokenCookie);
@@ -94,7 +98,8 @@ export const refreshToken = async (req, res, next) => {
         await session.refreshSession(newAccess, newRefresh);
         userService.setAuthCookies(res, newAccess, newRefresh);
 
-        return sendSuccess(res, 200, { accessToken: newAccess });
+        // Return both tokens in body so frontend can update localStorage
+        return sendSuccess(res, 200, { accessToken: newAccess, refreshToken: newRefresh });
     } catch (err) { next(err); }
 };
 

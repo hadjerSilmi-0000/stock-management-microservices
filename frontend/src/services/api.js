@@ -9,45 +9,70 @@ const api = axios.create({
   withCredentials: true,
 });
 
-// Attach Bearer token on every request
 api.interceptors.request.use(config => {
   const token = localStorage.getItem('accessToken');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 }, error => Promise.reject(error));
 
-// On 401 — try refresh once, then give up (no redirect loop)
 api.interceptors.response.use(
   response => response,
   async error => {
     const original = error.config;
+    const status = error.response?.status;
     const url = original?.url || '';
 
-    // Never retry on auth endpoints
-    if (url.includes('/users/login') || url.includes('/users/register') || url.includes('/users/refresh-token') || original._retry) {
-      return Promise.reject(error);
-    }
+    const isAuthEndpoint = (
+      url.includes('/users/login') ||
+      url.includes('/users/register') ||
+      url.includes('/users/refresh-token') ||
+      url.includes('/users/forgot-password') ||
+      url.includes('/users/reset-password') ||
+      url.includes('/users/verify-email')
+    );
 
-    if (error.response?.status === 401) {
+    if (isAuthEndpoint) return Promise.reject(error);
+
+    if (status === 401 && !original._retry) {
       original._retry = true;
       try {
-        const { data } = await axios.post(`${BASE}/users/refresh-token`, {}, { withCredentials: true });
-        const token = data?.data?.accessToken || data?.accessToken;
-        if (token) {
-          localStorage.setItem('accessToken', token);
-          original.headers.Authorization = `Bearer ${token}`;
+        const { data } = await axios.post(
+          `${BASE}/users/refresh-token`,
+          {},
+          { withCredentials: true }
+        );
+        const newToken = data?.data?.accessToken || data?.accessToken;
+        if (newToken) {
+          localStorage.setItem('accessToken', newToken);
+          original.headers.Authorization = `Bearer ${newToken}`;
           return api(original);
         }
       } catch {
-        // Refresh failed — clear storage but DON'T redirect automatically
-        // Let the page handle the 401 gracefully (show empty state)
-        localStorage.removeItem('sf_user');
-        localStorage.removeItem('accessToken');
+        _handleAuthFailure();
+        return Promise.reject(error);
       }
     }
+
+    if (status === 403 && original._retry) {
+      _handleAuthFailure();
+    }
+
     return Promise.reject(error);
   }
 );
+
+function _handleAuthFailure() {
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('sf_user');
+  if (typeof window.__sfForceLogout === 'function') {
+    window.__sfForceLogout();
+  } else {
+    const publicPaths = ['/', '/login', '/register', '/forgot-password'];
+    if (!publicPaths.includes(window.location.pathname)) {
+      window.location.href = '/login';
+    }
+  }
+}
 
 export const authAPI = {
   register: data => api.post('/users/register', data),
@@ -89,8 +114,9 @@ export const stockAPI = {
   getSummary: () => api.get('/stock/summary'),
 };
 
+// GET /suppliers takes NO query params — backend returns 400 if you pass any
 export const suppliersAPI = {
-  getAll: params => api.get('/suppliers', { params }),
+  getAll: () => api.get('/suppliers'),
   getById: id => api.get(`/suppliers/${id}`),
   create: data => api.post('/suppliers', data),
   update: (id, d) => api.put(`/suppliers/${id}`, d),
