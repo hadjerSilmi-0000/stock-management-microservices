@@ -20,10 +20,6 @@ jobs:
       matrix:
         service: [users, products, stock, suppliers]
 
-    defaults:
-      run:
-        working-directory: services/${{ matrix.service }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4.2.2
@@ -33,10 +29,17 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install dependencies
+      # Install root dependencies first — Jest lives here
+      - name: Install root dependencies
+        run: npm install
+
+      # Install the service's own dependencies
+      - name: Install service dependencies
+        working-directory: services/${{ matrix.service }}
         run: npm install
 
       - name: Run tests
+        working-directory: services/${{ matrix.service }}
         run: npm test
         env:
           NODE_ENV: test
@@ -108,4 +111,4 @@ jobs:
           push: false
           tags: stockflow/${{ matrix.service }}:${{ github.sha }}
           cache-from: type=gha
-          cache-to: type=gha,mode=ma
+          cache-to: type=gha,mode=max
