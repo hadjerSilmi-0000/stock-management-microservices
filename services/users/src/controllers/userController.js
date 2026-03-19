@@ -41,7 +41,10 @@ export const register = async (req, res, next) => {
     } catch (err) { next(err); }
 };
 
-// ── LOGIN — returns both tokens in body so frontend can store them ─────────────
+// ── LOGIN ─────────────────────────────────────────────────────────────────────
+// refreshToken is set as an httpOnly cookie (sameSite: lax) — NOT returned in body.
+// sameSite: lax allows the cookie to cross ports in dev (localhost:3000 → :5000).
+// We only return accessToken in the body for the Authorization header.
 export const login = async (req, res, next) => {
     try {
         const { email, password } = req.body;
@@ -63,33 +66,31 @@ export const login = async (req, res, next) => {
         await userService.resetFailedLoginAttempts(user._id, ipAddress);
         const { accessToken, refreshToken } = await userService.generateAndStoreTokens(user, { ipAddress, userAgent });
 
-        // Set httpOnly cookies (for browser requests on same domain)
+        // Set both tokens as httpOnly cookies (sameSite: lax works cross-port in dev)
         userService.setAuthCookies(res, accessToken, refreshToken);
 
-        // Also return BOTH tokens in body so frontend can store them
-        // (needed when frontend and API run on different ports in dev)
+        // Only return accessToken in body — frontend stores it for the Authorization header.
+        // refreshToken stays cookie-only (never in localStorage = no XSS risk).
         return sendSuccess(res, 200, {
             id: user._id,
             username: user.username,
             email: user.email,
             role: user.role,
             accessToken,
-            refreshToken,
         }, "Login successful");
     } catch (err) { next(err); }
 };
 
-// ── REFRESH TOKEN — accepts token from cookie OR request body ─────────────────
+// ── REFRESH TOKEN — cookie only, no body fallback needed anymore ──────────────
 export const refreshToken = async (req, res, next) => {
     try {
-        // Accept refreshToken from cookie (same-domain) or body (cross-port dev)
-        const refreshTokenCookie = req.cookies.refreshToken || req.body?.refreshToken;
-        if (!refreshTokenCookie) return sendError(res, 401, "No refresh token provided", "UNAUTHORIZED");
+        const token = req.cookies.refreshToken;
+        if (!token) return sendError(res, 401, "No refresh token provided", "UNAUTHORIZED");
 
-        const { valid, decoded } = await userService.validateRefreshToken(refreshTokenCookie);
+        const { valid, decoded } = await userService.validateRefreshToken(token);
         if (!valid) return sendError(res, 403, "Invalid refresh token", "INVALID_TOKEN");
 
-        const session = await Session.findActiveSession(refreshTokenCookie);
+        const session = await Session.findActiveSession(token);
         if (!session) return sendError(res, 403, "Session not found", "INVALID_TOKEN");
 
         const { token: newAccess } = JWTManager.generateAccessToken({ userId: decoded.userId, role: decoded.role });
@@ -98,8 +99,8 @@ export const refreshToken = async (req, res, next) => {
         await session.refreshSession(newAccess, newRefresh);
         userService.setAuthCookies(res, newAccess, newRefresh);
 
-        // Return both tokens in body so frontend can update localStorage
-        return sendSuccess(res, 200, { accessToken: newAccess, refreshToken: newRefresh });
+        // Only return new accessToken — refreshToken rotates via cookie
+        return sendSuccess(res, 200, { accessToken: newAccess });
     } catch (err) { next(err); }
 };
 
@@ -142,18 +143,22 @@ export const resetPassword = async (req, res, next) => {
 export const logout = async (req, res, next) => {
     try {
         const userId = req.user?._id;
-        const refreshToken = req.body?.refreshToken || req.cookies?.refreshToken || req.headers["x-refresh-token"];
+        const token = req.cookies?.refreshToken;
 
-        if (refreshToken) {
+        if (token) {
             if (userId) {
-                await Session.revokeSession(userId, refreshToken).catch(() => { });
+                await Session.revokeSession(userId, token).catch(() => { });
             } else {
-                const session = await Session.findOne({ refreshToken });
+                const session = await Session.findOne({ refreshToken: token });
                 if (session) await Session.findByIdAndDelete(session._id);
             }
         }
 
-        const cookieOpts = { httpOnly: true, sameSite: "strict", secure: process.env.NODE_ENV === "production" };
+        const cookieOpts = {
+            httpOnly: true,
+            sameSite: "lax",
+            secure: process.env.NODE_ENV === "production",
+        };
         res.clearCookie("accessToken", cookieOpts);
         res.clearCookie("refreshToken", cookieOpts);
 

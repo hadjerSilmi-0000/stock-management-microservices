@@ -14,6 +14,12 @@ services:
       - mongo_users_data:/data/db
     networks:
       - stock-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   mongo-products:
     image: mongo:7
@@ -25,6 +31,12 @@ services:
       - mongo_products_data:/data/db
     networks:
       - stock-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   mongo-stock:
     image: mongo:7
@@ -36,6 +48,12 @@ services:
       - mongo_stock_data:/data/db
     networks:
       - stock-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   mongo-suppliers:
     image: mongo:7
@@ -47,6 +65,12 @@ services:
       - mongo_suppliers_data:/data/db
     networks:
       - stock-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   rabbitmq:
     image: rabbitmq:3-management
@@ -54,22 +78,34 @@ services:
     restart: unless-stopped
     ports:
       - "5672:5672"    # AMQP
-      - "15672:15672"  # Management UI (admin/admin)
+      - "15672:15672"  # Management UI → http://localhost:15672 (admin/admin)
     environment:
       RABBITMQ_DEFAULT_USER: admin
       RABBITMQ_DEFAULT_PASS: admin
     networks:
       - stock-net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   consul:
     image: hashicorp/consul:1.17
     container_name: consul
     restart: unless-stopped
     ports:
-      - "8500:8500"  # UI available at http://localhost:8500
+      - "8500:8500"  # UI → http://localhost:8500
     command: agent -server -bootstrap-expect=1 -ui -client=0.0.0.0
     networks:
       - stock-net
+    healthcheck:
+      test: ["CMD", "consul", "members"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # ── Microservices ─────────────────────────────────────────────────
 
@@ -84,17 +120,29 @@ services:
     env_file:
       - ./services/users/.env
     environment:
+      - NODE_ENV=production
+      - PORT=5001
+      - SERVICE_NAME=users-service
       - MONGO_URI=mongodb://mongo-users:27017/users_db
       - RABBITMQ_URL=amqp://admin:admin@rabbitmq:5672
       - CONSUL_HOST=consul
-      - SERVICE_NAME=users-service
-      - PORT=5001
+      - CONSUL_PORT=8500
+      - FRONTEND_URL=http://localhost:3000
     depends_on:
-      - mongo-users
-      - rabbitmq
-      - consul
+      mongo-users:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
     networks:
       - stock-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5001/api/v1/users/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   products-service:
     build:
@@ -107,20 +155,31 @@ services:
     env_file:
       - ./services/products/.env
     environment:
+      - NODE_ENV=production
+      - PORT=5002
+      - SERVICE_NAME=products-service
       - MONGO_URI=mongodb://mongo-products:27017/products_db
       - RABBITMQ_URL=amqp://admin:admin@rabbitmq:5672
       - CONSUL_HOST=consul
-      - USERS_SERVICE_URL=http://users-service:5001
+      - CONSUL_PORT=8500
       - SUPPLIERS_SERVICE_URL=http://suppliers-service:5004
-      - SERVICE_NAME=products-service
-      - PORT=5002
     depends_on:
-      - mongo-products
-      - rabbitmq
-      - consul
-      - users-service
+      mongo-products:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+      users-service:
+        condition: service_healthy
     networks:
       - stock-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5002/api/v1/products/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   stock-service:
     build:
@@ -133,21 +192,34 @@ services:
     env_file:
       - ./services/stock/.env
     environment:
+      - NODE_ENV=production
+      - PORT=5003
+      - SERVICE_NAME=stock-service
       - MONGO_URI=mongodb://mongo-stock:27017/stock_db
       - RABBITMQ_URL=amqp://admin:admin@rabbitmq:5672
       - CONSUL_HOST=consul
-      - USERS_SERVICE_URL=http://users-service:5001
+      - CONSUL_PORT=8500
       - PRODUCTS_SERVICE_URL=http://products-service:5002
-      - SERVICE_NAME=stock-service
-      - PORT=5003
+      - DEFAULT_LOW_STOCK_THRESHOLD=10
     depends_on:
-      - mongo-stock
-      - rabbitmq
-      - consul
-      - users-service
-      - products-service
+      mongo-stock:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+      users-service:
+        condition: service_healthy
+      products-service:
+        condition: service_healthy
     networks:
       - stock-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5003/api/v1/stock/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   suppliers-service:
     build:
@@ -160,17 +232,84 @@ services:
     env_file:
       - ./services/suppliers/.env
     environment:
+      - NODE_ENV=production
+      - PORT=5004
+      - SERVICE_NAME=suppliers-service
       - MONGO_URI=mongodb://mongo-suppliers:27017/suppliers_db
       - RABBITMQ_URL=amqp://admin:admin@rabbitmq:5672
       - CONSUL_HOST=consul
-      - USERS_SERVICE_URL=http://users-service:5001
-      - SERVICE_NAME=suppliers-service
-      - PORT=5004
+      - CONSUL_PORT=8500
     depends_on:
-      - mongo-suppliers
-      - rabbitmq
-      - consul
-      - users-service
+      mongo-suppliers:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+      users-service:
+        condition: service_healthy
+    networks:
+      - stock-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5004/api/v1/suppliers/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ── API Gateway ───────────────────────────────────────────────────
+
+  gateway:
+    build:
+      context: ./services/gateway
+      dockerfile: Dockerfile
+    container_name: gateway
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    env_file:
+      - ./services/gateway/.env
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - FRONTEND_URL=http://localhost:3000
+      - USERS_SERVICE_URL=http://users-service:5001
+      - PRODUCTS_SERVICE_URL=http://products-service:5002
+      - STOCK_SERVICE_URL=http://stock-service:5003
+      - SUPPLIERS_SERVICE_URL=http://suppliers-service:5004
+    depends_on:
+      users-service:
+        condition: service_healthy
+      products-service:
+        condition: service_healthy
+      stock-service:
+        condition: service_healthy
+      suppliers-service:
+        condition: service_healthy
+    networks:
+      - stock-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ── Frontend ──────────────────────────────────────────────────────
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"  # nginx serves the React build on port 80 inside container
+    environment:
+      - REACT_APP_API_URL=http://localhost:5000/api/v1
+    depends_on:
+      gateway:
+        condition: service_healthy
     networks:
       - stock-net
 

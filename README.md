@@ -1,237 +1,145 @@
-# Backend Fixes — Setup & Integration Guide
+# StockFlow
 
-## What's included in this patch
+A full-stack inventory management platform built with a microservices architecture. Designed as a portfolio project demonstrating real-world backend patterns alongside a polished React frontend.
 
-| File | Type | Purpose |
-|------|------|---------|
-| `services/shared/utils/sendResponse.js` | NEW | Standardized response helper |
-| `services/users/src/app.js` | NEW | App factory (separates Express from server.listen) |
-| `services/products/src/app.js` | NEW | App factory |
-| `services/stock/src/app.js` | NEW | App factory |
-| `services/suppliers/src/app.js` | NEW | App factory |
-| `services/users/src/controllers/userController.js` | UPDATED | Standardized envelopes |
-| `services/users/src/routes/userRoutes.js` | UPDATED | Uses exported verifyToken handler |
-| `services/products/src/controllers/productController.js` | UPDATED | Standardized envelopes |
-| `services/stock/src/controllers/stockController.js` | UPDATED | Standardized envelopes |
-| `services/suppliers/src/controllers/supplierController.js` | UPDATED | Standardized envelopes |
-| `services/gateway/src/server.js` | NEW | API Gateway |
-| `services/gateway/.env` | NEW | Gateway environment config |
-| `services/gateway/package.json` | NEW | Gateway dependencies |
-| `jest.config.js` | NEW | Copy to each service root |
-| `services/users/src/__tests__/users.test.js` | NEW | Users tests |
-| `services/products/src/__tests__/products.test.js` | NEW | Products tests |
-| `services/stock/src/__tests__/stock.test.js` | NEW | Stock tests |
-| `services/suppliers/src/__tests__/suppliers.test.js` | NEW | Suppliers tests |
+![React](https://img.shields.io/badge/React-18-blue) ![Node.js](https://img.shields.io/badge/Node.js-18-green) ![MongoDB](https://img.shields.io/badge/MongoDB-6-green) ![JWT](https://img.shields.io/badge/Auth-JWT-orange) ![RabbitMQ](https://img.shields.io/badge/Events-RabbitMQ-orange)
 
 ---
 
-## Step 1 — Copy files into your project
+## What it does
 
-Copy each file from this patch to its matching path in your project.
+StockFlow lets a warehouse team track products, manage stock levels, record movements, and get low-stock alerts — all in one dashboard.
+
+- **Products** — CRUD catalog with categories, pricing, and supplier links
+- **Stock levels** — live inventory counts per product with visual progress bars
+- **Stock movements** — every entry and exit logged with reason, reference, and timestamp
+- **Low-stock alerts** — automatic threshold alerts surfaced in the dashboard
+- **Suppliers** — contact management with product linking
+- **Users** — role-based access (admin / manager) with email verification
 
 ---
 
-## Step 2 — Update server.js files to use app factories
+## Architecture
 
-Each service's `server.js` currently creates the Express app inline.
-You need to refactor it to import from `app.js` instead.
-
-### Pattern (same for all 4 services)
-
-**Before** — `services/users/src/server.js` had all middleware inline.
-
-**After** — replace the Express setup block with:
-
-```js
-// At the top of server.js, replace the app setup block with:
-import createApp from "./app.js";
-const app = createApp();
+```
+┌─────────────────────────────────────────────┐
+│              React Frontend :3000            │
+└─────────────────┬───────────────────────────┘
+                  │ HTTP
+┌─────────────────▼───────────────────────────┐
+│              API Gateway :5000               │
+│         (reverse proxy + CORS)               │
+└──┬──────────┬──────────┬──────────┬─────────┘
+   │          │          │          │
+:5001      :5002      :5003      :5004
+Users    Products    Stock    Suppliers
+  │          │          │          │
+users_db  products_db  stock_db  suppliers_db
+         (MongoDB — separate DB per service)
 ```
 
-Remove these lines from server.js (they now live in app.js):
-```js
-// DELETE these from server.js — app.js handles them now:
-app.use(cors(...))
-app.use(requestIdMiddleware)
-app.use(extractClientIP)
-app.use(requestLogger)
-app.use(performanceMonitor)
-app.use(express.json())
-app.use(cookieParser())
-app.use("/api-docs", ...)
-app.use("/api/v1/...", routes)
-app.get("/", ...)
-app.use(errorHandler)
-```
-
-Keep in server.js: MongoDB connect, RabbitMQ setup, Consul register, graceful shutdown, app.listen().
+Services communicate asynchronously via **RabbitMQ** — for example, when a product is created the stock service automatically creates a matching stock level entry. The **circuit breaker** pattern (via opossum) prevents cascading failures when an upstream service is unavailable.
 
 ---
 
-## Step 3 — Install test dependencies (in each service folder)
+## Tech stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 18, React Router v6, custom CSS design system |
+| Backend | Node.js 18, Express 5, ES Modules |
+| Database | MongoDB 6 (Mongoose) — one DB per service |
+| Auth | JWT (access + refresh tokens), httpOnly cookies, bcrypt |
+| Messaging | RabbitMQ (topic exchange, event-driven) |
+| Service discovery | Consul |
+| Resilience | Circuit breaker (opossum), graceful shutdown |
+| Validation | Joi |
+| Testing | Jest, Supertest, MongoDB Memory Server |
+| API docs | Swagger/OpenAPI on each service |
+
+---
+
+## Getting started
+
+See **[SETUP.md](./SETUP.md)** for the full local dev guide including secret generation.
+
+**Quick version:**
 
 ```bash
-# Run this in each of the 4 service directories
-cd services/users
-npm install --save-dev jest supertest mongodb-memory-server
+# 1. Copy and fill .env files
+cp services/users/.env.example services/users/.env
+# (repeat for products, stock, suppliers, gateway, frontend)
 
-cd ../products
-npm install --save-dev jest supertest mongodb-memory-server
+# 2. Start services (separate terminals)
+cd services/users     && npm install && npm run dev  # :5001
+cd services/products  && npm install && npm run dev  # :5002
+cd services/stock     && npm install && npm run dev  # :5003
+cd services/suppliers && npm install && npm run dev  # :5004
+cd services/gateway   && npm install && npm run dev  # :5000
 
-cd ../stock
-npm install --save-dev jest supertest mongodb-memory-server
-
-cd ../suppliers
-npm install --save-dev jest supertest mongodb-memory-server
+# 3. Start frontend
+cd frontend && npm install && npm start              # :3000
 ```
 
 ---
 
-## Step 4 — Add jest config and scripts to each service's package.json
+## Project structure
 
-Copy `jest.config.js` (from this patch) to each service root:
 ```
-services/users/jest.config.js
-services/products/jest.config.js
-services/stock/jest.config.js
-services/suppliers/jest.config.js
+stock-management-microservices/
+├── frontend/                  # React 18 SPA
+│   └── src/
+│       ├── context/           # Auth, Theme, Toast
+│       ├── pages/             # public/, protected/, admin/, errors/
+│       ├── components/        # layout/, ui/, charts/
+│       └── services/api.js    # Axios client + interceptors
+│
+├── services/
+│   ├── gateway/               # API Gateway (http-proxy-middleware)
+│   ├── users/                 # Auth, JWT, sessions, email
+│   ├── products/              # Product catalog, search, categories
+│   ├── stock/                 # Levels, movements, alerts, summary
+│   ├── suppliers/             # Supplier CRUD + product linking
+│   └── shared/                # Shared middleware, utils, events
+│
+├── SETUP.md                   # Local dev guide
+└── docs/
+    └── INTEGRATION.md         # Service integration reference
 ```
 
-Add these scripts to each service's `package.json`:
+---
+
+## API response format
+
+All endpoints return a consistent envelope:
+
 ```json
-"scripts": {
-  "test":          "node --experimental-vm-modules node_modules/.bin/jest",
-  "test:watch":    "node --experimental-vm-modules node_modules/.bin/jest --watch",
-  "test:coverage": "node --experimental-vm-modules node_modules/.bin/jest --coverage"
-}
+{ "success": true, "data": { ... }, "message": "optional" }
+{ "success": true, "data": [...], "pagination": { "page": 1, "total": 42 } }
+{ "success": false, "error": { "code": "NOT_FOUND", "message": "..." } }
 ```
 
 ---
 
-## Step 5 — Install and start the API Gateway
+## Running tests
 
 ```bash
-cd services/gateway
-npm install
-npm run dev
-```
-
-The gateway starts on **port 5000**.
-Your frontend should point ALL requests to `http://localhost:5000` instead of individual service ports.
-
-### Gateway routes
-
-| Frontend calls | Gateway forwards to |
-|----------------|---------------------|
-| `POST /api/v1/users/login` | users-service :5001 |
-| `GET /api/v1/products` | products-service :5002 |
-| `POST /api/v1/stock/entry` | stock-service :5003 |
-| `GET /api/v1/suppliers` | suppliers-service :5004 |
-
-### Gateway health check
-```
-GET http://localhost:5000/health
-```
-Returns status of all 4 upstream services.
-
----
-
-## Step 6 — Run the tests
-
-```bash
-# From each service directory:
-cd services/users    && npm test
-cd services/products && npm test
-cd services/stock    && npm test
+cd services/users     && npm test
+cd services/products  && npm test
+cd services/stock     && npm test
 cd services/suppliers && npm test
 ```
 
-Expected output: all green, ~8–10 tests per service.
+Each service has ~8–10 integration tests using an in-memory MongoDB instance (no external dependencies required).
 
 ---
 
-## Step 7 — Update your frontend base URL
+## Key design decisions
 
-```js
-// Before (calling services directly):
-const USERS_API    = "http://localhost:5001/api/v1/users";
-const PRODUCTS_API = "http://localhost:5002/api/v1/products";
+**Separate databases per service** — each microservice owns its own MongoDB database. No cross-service DB queries. Data sharing happens through API calls and events.
 
-// After (everything through the gateway):
-const API_BASE = "http://localhost:5000/api/v1";
-// Then: ${API_BASE}/users, ${API_BASE}/products, etc.
-```
+**Cookie-based refresh tokens** — the refresh token is stored in an `httpOnly` cookie (`sameSite: lax`) and never exposed to JavaScript. The access token (15 min TTL) is stored in `localStorage` for the `Authorization` header. This eliminates the XSS attack surface for the long-lived token.
 
----
+**Client-side product enrichment** — the stock service stores `productId` references, not embedded product names. The frontend loads the product map separately and joins client-side. This avoids tight coupling between services and the circuit breaker fallback showing "Unknown" in the UI.
 
-## Standard response envelope (what the frontend receives)
-
-### Success — single item
-```json
-{
-  "success": true,
-  "data": { "_id": "...", "name": "...", "..." : "..." },
-  "message": "Optional human note"
-}
-```
-
-### Success — list
-```json
-{
-  "success": true,
-  "data": [ {...}, {...} ],
-  "pagination": {
-    "page": 1,
-    "limit": 20,
-    "total": 45,
-    "totalPages": 3,
-    "hasNextPage": true,
-    "hasPrevPage": false
-  }
-}
-```
-
-### Success — mutation with no body (delete, logout)
-```json
-{
-  "success": true,
-  "data": null,
-  "message": "Deleted successfully"
-}
-```
-
-### Error
-```json
-{
-  "success": false,
-  "error": {
-    "code": "PRODUCT_NOT_FOUND",
-    "message": "Product not found",
-    "timestamp": "2026-01-17T22:00:00.000Z",
-    "details": [...]
-  }
-}
-```
-
----
-
-## Startup order (development)
-
-```bash
-# 1. Start infrastructure
-mongod                          # MongoDB
-rabbitmq-server                 # RabbitMQ
-consul agent -dev               # Consul
-
-# 2. Start microservices (each in a separate terminal)
-cd services/users     && npm run dev   # :5001
-cd services/products  && npm run dev   # :5002
-cd services/stock     && npm run dev   # :5003
-cd services/suppliers && npm run dev   # :5004
-
-# 3. Start gateway
-cd services/gateway   && npm run dev   # :5000
-
-# 4. Start frontend
-# Point it at http://localhost:5000
-```
+**Circuit breaker on inter-service calls** — if the products service goes down, the stock service continues to work using fallback data rather than returning 500 errors.

@@ -1,0 +1,65 @@
+name: PR Check
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+jobs:
+
+  # ── Quick smoke test: does the gateway config look right? ─────────
+  lint-compose:
+    name: Validate docker-compose
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate docker-compose syntax
+        run: docker compose config --quiet
+
+  # ── Check all .env.example files exist ────────────────────────────
+  check-env-examples:
+    name: Check .env.example files
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify .env.example files present
+        run: |
+          missing=0
+          for f in \
+            services/users/.env.example \
+            services/products/.env.example \
+            services/stock/.env.example \
+            services/suppliers/.env.example \
+            services/gateway/.env.example \
+            frontend/.env.example; do
+            if [ ! -f "$f" ]; then
+              echo "MISSING: $f"
+              missing=1
+            else
+              echo "OK: $f"
+            fi
+          done
+          exit $missing
+
+  # ── Make sure no .env files (real secrets) are committed ──────────
+  check-no-secrets:
+    name: Check no .env secrets committed
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Scan for committed .env files
+        run: |
+          # Find any .env files that are NOT .env.example
+          found=$(git ls-files | grep -E '^.*\.env$' | grep -v '.env.example' || true)
+          if [ -n "$found" ]; then
+            echo "ERROR: Real .env files committed to repo:"
+            echo "$found"
+            exit 1
+          fi
+          echo "OK: No .env secrets found in repo"

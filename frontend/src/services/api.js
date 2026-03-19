@@ -6,15 +6,19 @@ const api = axios.create({
   baseURL: BASE,
   headers: { 'Content-Type': 'application/json' },
   timeout: 15000,
+  // withCredentials: true sends the httpOnly cookies (accessToken, refreshToken)
+  // on every request. sameSite: 'lax' on the backend allows this cross-port in dev.
   withCredentials: true,
 });
 
+// ── Request: attach accessToken from localStorage as Bearer header ────────────
 api.interceptors.request.use(config => {
   const token = localStorage.getItem('accessToken');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 }, error => Promise.reject(error));
 
+// ── Response: auto-refresh on 401, redirect on auth failure ──────────────────
 api.interceptors.response.use(
   response => response,
   async error => {
@@ -22,6 +26,7 @@ api.interceptors.response.use(
     const status = error.response?.status;
     const url = original?.url || '';
 
+    // Never retry auth endpoints — avoids infinite loops
     const isAuthEndpoint = (
       url.includes('/users/login') ||
       url.includes('/users/register') ||
@@ -30,12 +35,13 @@ api.interceptors.response.use(
       url.includes('/users/reset-password') ||
       url.includes('/users/verify-email')
     );
-
     if (isAuthEndpoint) return Promise.reject(error);
 
     if (status === 401 && !original._retry) {
       original._retry = true;
       try {
+        // refreshToken cookie is sent automatically (withCredentials: true + sameSite: lax)
+        // No body payload needed — the cookie carries the token.
         const { data } = await axios.post(
           `${BASE}/users/refresh-token`,
           {},
@@ -86,7 +92,6 @@ export const authAPI = {
   updateProfile: data => api.put('/users/profile', data),
   changePassword: data => api.put('/users/change-password', data),
   verifyToken: () => api.get('/users/verify-token'),
-  getMe: () => api.get('/users/me'),
 };
 
 export const userAPI = {
@@ -114,7 +119,6 @@ export const stockAPI = {
   getSummary: () => api.get('/stock/summary'),
 };
 
-// GET /suppliers takes NO query params — backend returns 400 if you pass any
 export const suppliersAPI = {
   getAll: () => api.get('/suppliers'),
   getById: id => api.get(`/suppliers/${id}`),

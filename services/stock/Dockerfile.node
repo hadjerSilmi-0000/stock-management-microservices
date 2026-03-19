@@ -1,0 +1,23 @@
+FROM node:18-alpine
+
+# wget is needed for the healthcheck in docker-compose
+RUN apk add --no-cache wget
+
+WORKDIR /app
+
+# Copy package files first — Docker caches this layer
+# so npm install only reruns when dependencies change
+COPY package*.json ./
+
+RUN npm ci --only=production
+
+# Copy source
+COPY . .
+
+# Non-root user for security
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+USER appuser
+
+EXPOSE 5001
+
+CMD ["node", "src/server.js"]
