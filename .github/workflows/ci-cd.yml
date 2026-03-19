@@ -27,17 +27,18 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2          # latest — fixes Node.js 20 warning
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v4.4.0        # latest — fixes Node.js 20 warning
         with:
-          node-version: 18
-          cache: npm
-          cache-dependency-path: services/${{ matrix.service }}/package-lock.json
+          node-version: 20
+          # Only cache if package-lock.json exists — avoids "path not resolved" error
+          # when lockfiles haven't been committed yet
+          cache: ${{ hashFiles(format('services/{0}/package-lock.json', matrix.service)) != '' && 'npm' || '' }}
 
       - name: Install dependencies
-        run: npm ci          # ← no --only=production, devDeps (Jest) must be included
+        run: npm install                        # use install, not ci — works without lockfile
 
       - name: Run tests
         run: npm test
@@ -60,17 +61,16 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v4.4.0
         with:
-          node-version: 18
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          node-version: 20
+          cache: ${{ hashFiles('frontend/package-lock.json') != '' && 'npm' || '' }}
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Build
         run: npm run build
@@ -103,7 +103,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
