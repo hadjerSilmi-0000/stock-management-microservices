@@ -1,56 +1,58 @@
-import { getCircuitBreaker } from '../utils/circuitBreaker.js';
+// services/shared/middlewares/authMiddleware.js
+// Verifies JWT directly — no network call to users service needed.
+// This is faster, more reliable, and works correctly across services.
 
-const USERS_SERVICE_URL = process.env.USERS_SERVICE_URL || "http://localhost:5001";
-
-const usersBreaker = getCircuitBreaker('users-service', {
-    timeout: 3000,
-    errorThresholdPercentage: 50,
-    resetTimeout: 30000,
-    volumeThreshold: 3,
-}, () => {
-    throw new Error('Authentication service unavailable');
-});
+import jwt from "jsonwebtoken";
 
 export const authMiddleware = async (req, res, next) => {
-    // Skip auth if req.user already set (e.g. by test middleware)
+    // Already set by test middleware
     if (req.user) return next();
 
     try {
-        const token = req.cookies?.accessToken ||
-            req.headers.authorization?.replace("Bearer ", "");
+        // Get token from cookie OR Authorization header
+        const token =
+            req.cookies?.accessToken ||
+            req.headers.authorization?.replace("Bearer ", "")?.trim();
 
         if (!token) {
             return res.status(401).json({
                 success: false,
-                message: "No access token provided"
+                message: "No access token provided",
             });
         }
 
-        const response = await usersBreaker.execute({
-            method: 'GET',
-            url: `${USERS_SERVICE_URL}/api/v1/users/verify-token`,
-            headers: { Cookie: `accessToken=${token}` }
-        });
+        const secret = process.env.JWT_ACCESS_SECRET;
+        if (!secret) {
+            console.error("[authMiddleware] JWT_ACCESS_SECRET not set!");
+            return res.status(500).json({
+                success: false,
+                message: "Server configuration error",
+            });
+        }
 
-        if (!response.success) {
+        const decoded = jwt.verify(token, secret);
+
+        // Attach user info to request
+        req.user = {
+            id: decoded.userId,
+            _id: decoded.userId,
+            role: decoded.role,
+            username: decoded.username || "",
+            email: decoded.email || "",
+        };
+
+        next();
+    } catch (err) {
+        if (err.name === "TokenExpiredError") {
             return res.status(401).json({
                 success: false,
-                message: "Invalid token"
-            });
-        }
-
-        req.user = response.user;
-        next();
-    } catch (error) {
-        if (error.message.includes('unavailable')) {
-            return res.status(503).json({
-                success: false,
-                message: "Authentication service temporarily unavailable"
+                message: "Token expired",
+                code: "TOKEN_EXPIRED",
             });
         }
         return res.status(401).json({
             success: false,
-            message: "Invalid or expired token"
+            message: "Invalid token",
         });
     }
 };

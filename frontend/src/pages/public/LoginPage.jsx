@@ -5,8 +5,8 @@ import { useToast } from '../../context/ToastContext';
 import Icon from '../../components/ui/Icon';
 
 const LoginPage = () => {
-  const [email, setEmail] = useState('admin@stockflow.io');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState('admin@stockmanager.com');
+  const [password, setPassword] = useState('Admin@123');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const { login } = useAuth();
@@ -15,11 +15,16 @@ const LoginPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError(''); setLoading(true);
+    setError('');
+    setLoading(true);
     const result = await login(email, password);
     setLoading(false);
-    if (result.success) { toast('Welcome back!', 'success'); navigate('/dashboard'); }
-    else setError(result.message);
+    if (result.success) {
+      toast('Welcome back!', 'success');
+      navigate('/dashboard', { replace: true });
+    } else {
+      setError(result.message);
+    }
   };
 
   return (
@@ -57,7 +62,7 @@ const LoginPage = () => {
             <div style={{ height: 8 }} />
             <button className="btn-primary" type="submit" disabled={loading}>
               {loading
-                ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><div className="spinner" style={{ borderColor: 'rgba(255,255,255,0.2)', borderTopColor: 'white' }} /> Signing in…</span>
+                ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><div className="spinner" style={{ borderColor: 'rgba(255,255,255,0.2)', borderTopColor: 'white' }} />Signing in…</span>
                 : 'Sign In'}
             </button>
           </form>
@@ -69,8 +74,8 @@ const LoginPage = () => {
           </div>
 
           <div style={{ background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.15)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: 'var(--slate-400)' }}>
-            <strong style={{ color: 'var(--orange-400)' }}>Admin:</strong> admin@stockflow.io / admin123<br />
-            <strong style={{ color: 'var(--orange-400)' }}>Manager:</strong> manager@stockflow.io / manager123
+            <strong style={{ color: 'var(--orange-400)' }}>Admin:</strong> admin@stockmanager.com / Admin@123<br />
+            <strong style={{ color: 'var(--orange-400)' }}>Manager:</strong> sarah@stockmanager.com / Manager@123
           </div>
 
           <p style={{ textAlign: 'center', marginTop: 24, fontSize: 13, color: 'var(--slate-500)' }}>
@@ -91,14 +96,12 @@ const LoginPage = () => {
           <div className="floating-badge" style={{ bottom: '28%', left: '5%', animationDelay: '0.5s' }}>
             <Icon name="CheckCircle" size={12} style={{ marginRight: 4 }} />99.9% uptime
           </div>
-
           <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 40, fontWeight: 800, color: 'white', lineHeight: 1.1, letterSpacing: '-1.5px', marginBottom: 16, textAlign: 'center', position: 'relative', zIndex: 1 }}>
             Control your<br /><span style={{ background: 'linear-gradient(135deg,var(--orange-400),var(--amber-400))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>entire inventory</span><br />from one place
           </h2>
           <p style={{ color: 'var(--slate-400)', fontSize: 15, textAlign: 'center', lineHeight: 1.6, maxWidth: 320, marginBottom: 40, position: 'relative', zIndex: 1 }}>
             Real-time tracking, automated alerts, and supplier management — powered by microservices.
           </p>
-
           <div className="stats-grid">
             {[{ value: '2,840', label: 'Products tracked' }, { value: '98.2%', label: 'Order accuracy' }, { value: '↓ 34%', label: 'Stock waste' }, { value: '4.8★', label: 'Team satisfaction' }].map((s, i) => (
               <div key={i} className="stat-card" style={{ animationDelay: `${0.3 + i * 0.1}s` }}>

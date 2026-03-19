@@ -3,7 +3,6 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import morgan from "morgan";
-import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -31,36 +30,38 @@ app.use(cors({
 app.use(cookieParser());
 app.use(morgan("dev"));
 
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 300 }));
+// ─── Proxy using filter function (v2 syntax) ──────────────────────────────────
+// First argument is a filter — receives the full original pathname.
+// This prevents Express from stripping the prefix, so the full path
+// is forwarded to the upstream service unchanged.
 
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20 });
-app.use("/api/v1/users/login", authLimiter);
-app.use("/api/v1/users/register", authLimiter);
+app.use(
+    createProxyMiddleware(
+        (pathname) => pathname.startsWith("/api/v1/users"),
+        { target: USERS_URL, changeOrigin: true }
+    )
+);
 
-// ─── Proxy — v3 with explicit pathRewrite to keep the full path ───────────────
-app.use("/api/v1/users", createProxyMiddleware({
-    target: USERS_URL,
-    changeOrigin: true,
-    pathRewrite: { "^/api/v1/users": "/api/v1/users" }, // keep path as-is
-}));
+app.use(
+    createProxyMiddleware(
+        (pathname) => pathname.startsWith("/api/v1/products"),
+        { target: PRODUCTS_URL, changeOrigin: true }
+    )
+);
 
-app.use("/api/v1/products", createProxyMiddleware({
-    target: PRODUCTS_URL,
-    changeOrigin: true,
-    pathRewrite: { "^/api/v1/products": "/api/v1/products" },
-}));
+app.use(
+    createProxyMiddleware(
+        (pathname) => pathname.startsWith("/api/v1/stock"),
+        { target: STOCK_URL, changeOrigin: true }
+    )
+);
 
-app.use("/api/v1/stock", createProxyMiddleware({
-    target: STOCK_URL,
-    changeOrigin: true,
-    pathRewrite: { "^/api/v1/stock": "/api/v1/stock" },
-}));
-
-app.use("/api/v1/suppliers", createProxyMiddleware({
-    target: SUPPLIERS_URL,
-    changeOrigin: true,
-    pathRewrite: { "^/api/v1/suppliers": "/api/v1/suppliers" },
-}));
+app.use(
+    createProxyMiddleware(
+        (pathname) => pathname.startsWith("/api/v1/suppliers"),
+        { target: SUPPLIERS_URL, changeOrigin: true }
+    )
+);
 
 // ─── Health ───────────────────────────────────────────────────────────────────
 app.get("/health", async (req, res) => {
@@ -70,7 +71,6 @@ app.get("/health", async (req, res) => {
         { name: "stock-service", url: `${STOCK_URL}/api/v1/stock/health` },
         { name: "suppliers-service", url: `${SUPPLIERS_URL}/api/v1/suppliers/health` },
     ];
-
     const results = await Promise.allSettled(
         checks.map(async ({ name, url }) => {
             try {
@@ -84,7 +84,6 @@ app.get("/health", async (req, res) => {
             }
         })
     );
-
     const services = results.map(r => r.value ?? { name: "unknown", status: "DOWN" });
     res.json({ success: true, data: { gateway: "UP", services } });
 });
