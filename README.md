@@ -2,8 +2,7 @@
 
 A full-stack inventory management platform built with a microservices architecture. Designed as a portfolio project demonstrating real-world backend patterns alongside a polished React frontend.
 
-![React](https://img.shields.io/badge/React-18-blue) ![Node.js](https://img.shields.io/badge/Node.js-18-green) ![MongoDB](https://img.shields.io/badge/MongoDB-6-green) ![JWT](https://img.shields.io/badge/Auth-JWT-orange) ![RabbitMQ](https://img.shields.io/badge/Events-RabbitMQ-orange)
-
+![CI](https://github.com/hadjerSilmi-0000/stock-management-microservices/actions/workflows/ci-cd.yml/badge.svg) ![React](https://img.shields.io/badge/React-18-blue) ![Node.js](https://img.shields.io/badge/Node.js-18-green) ![MongoDB](https://img.shields.io/badge/MongoDB-6-green) ![JWT](https://img.shields.io/badge/Auth-JWT-orange) ![RabbitMQ](https://img.shields.io/badge/Events-RabbitMQ-orange)
 ---
 
 ## What it does
