@@ -6,9 +6,11 @@ yarn.lock
 # Env
 .env
 
-# Logs
+# Logs 
 logs/
 *.log
+**/logs/
+**/*.log
 
 # OS
 .DS_Store
