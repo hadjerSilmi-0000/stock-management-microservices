@@ -6,8 +6,8 @@ import { useTheme } from '../../context/ThemeContext';
 import Icon from '../../components/ui/Icon';
 
 const LoginPage = () => {
-  const [email, setEmail] = useState('admin@stockmanager.com');
-  const [password, setPassword] = useState('Admin@123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const { login } = useAuth();
@@ -31,9 +31,7 @@ const LoginPage = () => {
 
   return (
     <div className="auth-layout">
-      {/* LEFT — FORM */}
       <div className="auth-left">
-        {/* Theme toggle in top-right corner */}
         <button className="theme-toggle" onClick={toggleTheme}
           style={{ position: 'absolute', top: 24, right: 24 }}
           title="Toggle theme"
@@ -77,24 +75,12 @@ const LoginPage = () => {
             </button>
           </form>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, margin: '24px 0', color: 'var(--text-muted)', fontSize: 13 }}>
-            <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-            Demo credentials pre-filled
-            <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-          </div>
-
-          <div style={{ background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.15)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: 'var(--text-secondary)' }}>
-            <strong style={{ color: 'var(--orange-400)' }}>Admin:</strong> admin@stockmanager.com / Admin@123<br />
-            <strong style={{ color: 'var(--orange-400)' }}>Manager:</strong> sarah@stockmanager.com / Manager@123
-          </div>
-
           <p style={{ textAlign: 'center', marginTop: 24, fontSize: 13, color: 'var(--text-muted)' }}>
             No account? <span className="auth-link" onClick={() => navigate('/register')}>Create one free</span>
           </p>
         </div>
       </div>
 
-      {/* RIGHT — VISUAL */}
       <div className="auth-right">
         <div className="auth-right-inner">
           <div className="floating-badge" style={{ top: '18%', left: '8%', animationDelay: '0s' }}>

@@ -156,7 +156,7 @@ const SuppliersPage = () => {
 
               {/* ID for linking products */}
               <div style={{ background: 'var(--bg-hover)', borderRadius: 6, padding: '6px 10px', marginBottom: 12 }}>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>Supplier ID — use when creating products</div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>Supplier ID</div>
                 <code style={{ fontSize: 11, color: 'var(--orange-400)', wordBreak: 'break-all' }}>{s._id}</code>
               </div>
 

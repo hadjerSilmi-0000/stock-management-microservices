@@ -398,8 +398,8 @@ const StockPage = () => {
             <div className="form-group">
               <label className="form-label">Product ID *</label>
               <input className="form-input" value={form.productId} onChange={e => setForm(p => ({ ...p, productId: e.target.value }))}
-                placeholder="MongoDB ObjectId of the product" style={{ fontFamily: 'monospace' }} />
-              <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Copy the _id from the Products page</p>
+                placeholder="Product ID" style={{ fontFamily: 'monospace' }} />
+
             </div>
             <div className="form-row">
               <div className="form-group">

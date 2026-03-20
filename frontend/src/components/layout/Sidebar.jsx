@@ -13,7 +13,7 @@ const Sidebar = () => {
   const mainNav = [
     { path: '/dashboard', label: 'Dashboard', icon: 'LayoutDashboard' },
     { path: '/products', label: 'Products', icon: 'Package' },
-    { path: '/stock', label: 'Stock', icon: 'Archive', badge: '3' },
+    { path: '/stock', label: 'Stock', icon: 'Archive' },
     { path: '/suppliers', label: 'Suppliers', icon: 'Truck' },
   ];
   const adminNav = [
@@ -35,7 +35,6 @@ const Sidebar = () => {
     <button className={`nav-item ${path === item.path ? 'active' : ''}`} onClick={() => navigate(item.path)}>
       <Icon name={item.icon} size={16} />
       <span style={{ flex: 1 }}>{item.label}</span>
-      {item.badge && <span className="nav-item-badge">{item.badge}</span>}
     </button>
   );
 

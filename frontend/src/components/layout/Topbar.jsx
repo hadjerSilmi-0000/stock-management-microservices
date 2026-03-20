@@ -1,10 +1,8 @@
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Icon from '../ui/Icon';
 import { useTheme } from '../../context/ThemeContext';
 
 const Topbar = ({ title, subtitle }) => {
-  const [search, setSearch] = useState('');
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
 
@@ -15,10 +13,6 @@ const Topbar = ({ title, subtitle }) => {
         {subtitle && <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '1px' }}>{subtitle}</div>}
       </div>
       <div className="topbar-actions">
-        <div className="search-bar">
-          <Icon name="Search" size={14} style={{ color: 'var(--text-muted)' }} />
-          <input placeholder="Search anything…" value={search} onChange={e => setSearch(e.target.value)} />
-        </div>
         <button className="topbar-btn" onClick={() => navigate('/stock')}>
           <Icon name="Bell" size={16} />
           <div className="topbar-badge" />
