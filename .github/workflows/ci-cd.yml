@@ -12,6 +12,9 @@ concurrency:
 
 jobs:
 
+  # ── Run all 4 service test suites in parallel ─────────────────────
+  # Jest lives at the root (npm workspaces monorepo) — all test commands
+  # must run from the repo root, not from individual service directories
   test-services:
     name: Test ${{ matrix.service }}
     runs-on: ubuntu-latest
@@ -29,18 +32,11 @@ jobs:
         with:
           node-version: 20
 
-      # Install root dependencies first — Jest lives here
       - name: Install root dependencies
-        run: npm install
-
-      # Install the service's own dependencies
-      - name: Install service dependencies
-        working-directory: services/${{ matrix.service }}
-        run: npm install
+        run: npm install        # installs Jest + all workspace deps from root
 
       - name: Run tests
-        working-directory: services/${{ matrix.service }}
-        run: npm test
+        run: npm run test:${{ matrix.service }}   # uses root scripts e.g. test:users
         env:
           NODE_ENV: test
           JWT_ACCESS_SECRET: test_access_secret_at_least_32_chars_long
@@ -49,6 +45,7 @@ jobs:
           JWT_PASSWORD_RESET_SECRET: test_reset_secret_at_least_32_chars_long
           FRONTEND_URL: http://localhost:3000
 
+  # ── Frontend build ────────────────────────────────────────────────
   test-frontend:
     name: Frontend build
     runs-on: ubuntu-latest
@@ -75,6 +72,7 @@ jobs:
           CI: false
           REACT_APP_API_URL: http://localhost:5000/api/v1
 
+  # ── Docker build check (main branch only) ─────────────────────────
   docker-build:
     name: Docker build (${{ matrix.service }})
     runs-on: ubuntu-latest
